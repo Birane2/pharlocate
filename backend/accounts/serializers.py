@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from .models import User
@@ -13,7 +14,15 @@ class LoginSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
-        data = super().validate(attrs)
+        try:
+            data = super().validate(attrs)
+        except AuthenticationFailed as exc:
+            if 'No active account found' in str(exc.detail):
+                raise AuthenticationFailed(
+                    'Identifiants invalides ou compte suspendu.'
+                )
+            raise
+
         data['token_usage'] = {
             'access': 'Use this token in Authorization: Bearer <access>',
             'refresh': 'Use this token only on /api/auth/refresh/',

@@ -10,6 +10,13 @@ class MedicamentAdmin(admin.ModelAdmin):
 
 @admin.register(Stock)
 class StockAdmin(admin.ModelAdmin):
-    list_display = ('pharmacie', 'medicament', 'quantite', 'prix', 'date_mise_a_jour')
+    list_display = (
+        'pharmacie',
+        'medicament',
+        'quantite',
+        'prix',
+        'seuil_alerte',
+        'date_modification',
+    )
     list_filter = ('pharmacie',)
     search_fields = ('pharmacie__nom', 'medicament__nom')

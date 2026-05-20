@@ -1,8 +1,13 @@
 from django.urls import path
-from .views import PharmacyListCreateView, PharmacyDetailView, HoraireListCreateView
+
+from .views import (
+    PharmacienPharmacyProfileView,
+    PharmacyDetailView,
+    PharmacyListCreateView,
+)
 
 urlpatterns = [
+    path('my-pharmacy/', PharmacienPharmacyProfileView.as_view(), name='my_pharmacy'),
     path('', PharmacyListCreateView.as_view(), name='pharmacy_list_create'),
     path('<int:pk>/', PharmacyDetailView.as_view(), name='pharmacy_detail'),
-    path('horaires/', HoraireListCreateView.as_view(), name='horaire_list_create'),
 ]
