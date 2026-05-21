@@ -1,7 +1,7 @@
 import Button from "../ui/Button";
 import Badge from "../ui/Badge";
 import Card from "../ui/Card";
-import ReviewForm from "../reviews/ReviewForm";
+import AvisForm from "../reviews/AvisForm";
 
 function PharmacyReviews({
   avis = [],
@@ -65,7 +65,7 @@ function PharmacyReviews({
       </Card>
 
       {canReview ? (
-        <ReviewForm
+        <AvisForm
           disabled={submittingReview}
           error={reviewError}
           successMessage={reviewSuccess}

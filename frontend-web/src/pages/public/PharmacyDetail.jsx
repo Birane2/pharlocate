@@ -5,6 +5,7 @@ import {
   faArrowLeft,
   faCapsules,
   faCircleInfo,
+  faStar,
   faRotateRight,
 } from "@fortawesome/free-solid-svg-icons";
 import PharmacyHoraires from "../../components/pharmacies/PharmacyHoraires";
@@ -182,6 +183,21 @@ function PharmacyDetail() {
     }
   };
 
+  const handleLeaveReview = () => {
+    if (!isAuthenticated) {
+      navigate("/login");
+      return;
+    }
+
+    const reviewSection = document.getElementById("pharmacy-reviews");
+    reviewSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    window.setTimeout(() => {
+      const commentField = document.getElementById("pharmacy-review-commentaire");
+      commentField?.focus();
+    }, 300);
+  };
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(47,166,163,0.12),_transparent_26%),linear-gradient(180deg,_#f5fbff_0%,_#ffffff_48%,_#f7fcfb_100%)]">
       <Navbar />
@@ -258,24 +274,41 @@ function PharmacyDetail() {
 
               <div className="grid gap-8 xl:grid-cols-[0.9fr_1.1fr]">
                 <PharmacyHoraires horaires={pharmacy.horaires || []} />
-                <PharmacyReviews
-                  avis={reviews}
-                  noteMoyenne={noteMoyenne}
-                  totalAvis={totalAvis}
-                  canReview={isAuthenticated && role === "utilisateur"}
-                  isAuthenticated={isAuthenticated}
-                  submittingReview={reviewSubmitting}
-                  reviewError={reviewError}
-                  reviewSuccess={reviewSuccess}
-                  onSubmitReview={handleSubmitReview}
-                  onGoToLogin={() => navigate("/login")}
-                />
+                <div id="pharmacy-reviews">
+                  <PharmacyReviews
+                    avis={reviews}
+                    noteMoyenne={noteMoyenne}
+                    totalAvis={totalAvis}
+                    canReview={isAuthenticated && role === "utilisateur"}
+                    isAuthenticated={isAuthenticated}
+                    submittingReview={reviewSubmitting}
+                    reviewError={reviewError}
+                    reviewSuccess={reviewSuccess}
+                    onSubmitReview={handleSubmitReview}
+                    onGoToLogin={() => navigate("/login")}
+                  />
+                </div>
               </div>
 
               <Card
                 title="Medicaments disponibles"
                 subtitle="Stocks publics recuperes depuis l'API des medicaments."
-                action={<Badge variant="blue">{stockSummary.availableItemsCount} disponible(s)</Badge>}
+                action={
+                  <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+                    <Badge variant="blue">
+                      {stockSummary.availableItemsCount} disponible(s)
+                    </Badge>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      icon={faStar}
+                      onClick={handleLeaveReview}
+                    >
+                      Laisser un avis
+                    </Button>
+                  </div>
+                }
               >
                 {!stocksLoading && !stocksError && stocks.length > 0 && (
                   <div className="mb-6 grid gap-4 lg:grid-cols-3">

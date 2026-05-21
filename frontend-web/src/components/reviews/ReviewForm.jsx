@@ -62,6 +62,7 @@ function ReviewForm({
             Commentaire
           </label>
           <textarea
+            id="pharmacy-review-commentaire"
             value={commentaire}
             disabled={disabled}
             onChange={(event) => setCommentaire(event.target.value)}
