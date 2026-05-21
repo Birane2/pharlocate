@@ -5,6 +5,17 @@ export const createReservation = async (payload) => {
   return res.data;
 };
 
+export const getUserReservations = async (params = {}) => {
+  const res = await API.get("/api/user/reservations/", { params });
+
+  return {
+    count: res.data.count ?? 0,
+    next: res.data.next ?? null,
+    previous: res.data.previous ?? null,
+    results: res.data.results || [],
+  };
+};
+
 export const getReservations = async (params = {}) => {
   const res = await API.get("/api/pharmacien/reservations/", { params });
 

@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faArrowLeft,
+  faCapsules,
   faCircleInfo,
   faRotateRight,
 } from "@fortawesome/free-solid-svg-icons";
@@ -10,10 +11,13 @@ import PharmacyHoraires from "../../components/pharmacies/PharmacyHoraires";
 import PharmacyInfoCard from "../../components/pharmacies/PharmacyInfoCard";
 import PharmacyReviews from "../../components/pharmacies/PharmacyReviews";
 import MedicamentCard from "../../components/medicaments/MedicamentCard";
+import Navbar from "../../components/layout/Navbar";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import Logo from "../../components/ui/Logo";
+import { useAuth } from "../../context/AuthContext";
+import { createAvis } from "../../services/avisService";
 import { getPublicPharmacyDetail, getPublicMediaUrl } from "../../services/pharmacyService";
 import { getStocksByPharmacy } from "../../services/stockService";
 
@@ -31,12 +35,19 @@ function getApiErrorMessage(error) {
 function PharmacyDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { isAuthenticated, role } = useAuth();
   const [pharmacy, setPharmacy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [stocks, setStocks] = useState([]);
   const [stocksLoading, setStocksLoading] = useState(true);
   const [stocksError, setStocksError] = useState("");
+  const [reviews, setReviews] = useState([]);
+  const [noteMoyenne, setNoteMoyenne] = useState(0);
+  const [totalAvis, setTotalAvis] = useState(0);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+  const [reviewSuccess, setReviewSuccess] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -49,6 +60,9 @@ function PharmacyDetail() {
 
         if (isMounted) {
           setPharmacy(data);
+          setReviews(data.avis || []);
+          setNoteMoyenne(data.note_moyenne || 0);
+          setTotalAvis(data.total_avis || 0);
         }
       } catch (requestError) {
         if (isMounted) {
@@ -103,6 +117,19 @@ function PharmacyDetail() {
     };
   }, [id]);
 
+  const stockSummary = useMemo(() => {
+    const availableItems = stocks.filter((stock) => Number(stock.quantite || 0) > 0);
+    const totalQuantity = stocks.reduce(
+      (total, stock) => total + Number(stock.quantite || 0),
+      0
+    );
+
+    return {
+      availableItemsCount: availableItems.length,
+      totalQuantity,
+    };
+  }, [stocks]);
+
   const handleOpenDirections = () => {
     if (!pharmacy?.latitude || !pharmacy?.longitude) {
       return;
@@ -113,12 +140,52 @@ function PharmacyDetail() {
   };
 
   const handleReserve = (stock) => {
-    const targetStock = stock?.id_stock ? `&stock=${stock.id_stock}` : "";
-    navigate(`/reservations/new?pharmacy=${pharmacy.id}${targetStock}`);
+    const stockIdentifier = stock?.id_stock || stock?.id;
+    const targetStock = stockIdentifier ? `?stock=${stockIdentifier}` : "";
+    navigate(`/reservations/new/${pharmacy.id}${targetStock}`);
+  };
+
+  const handleSubmitReview = async ({ note, commentaire, reset }) => {
+    try {
+      setReviewSubmitting(true);
+      setReviewError("");
+      setReviewSuccess("");
+
+      const response = await createAvis({
+        pharmacie: Number(id),
+        note,
+        commentaire,
+      });
+
+      const createdReview = response?.data;
+
+      if (createdReview) {
+        setReviews((currentReviews) => [createdReview, ...currentReviews]);
+        const nextTotal = totalAvis + 1;
+        const nextAverage = Number(
+          ((noteMoyenne * totalAvis + Number(note)) / nextTotal).toFixed(1)
+        );
+        setTotalAvis(nextTotal);
+        setNoteMoyenne(nextAverage);
+      }
+
+      setReviewSuccess(response?.message || "Avis ajoute avec succes.");
+      reset();
+    } catch (requestError) {
+      setReviewError(
+        requestError.response?.data?.error ||
+          requestError.response?.data?.detail ||
+          "Impossible de publier votre avis pour le moment."
+      );
+    } finally {
+      setReviewSubmitting(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(47,166,163,0.12),_transparent_26%),linear-gradient(180deg,_#f5fbff_0%,_#ffffff_48%,_#f7fcfb_100%)]">
+      <Navbar />
+
       <section className="mx-auto w-full max-w-7xl px-4 pb-8 pt-8 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <Logo className="h-14 sm:h-16" to="/" />
@@ -186,21 +253,59 @@ function PharmacyDetail() {
                 photoUrl={getPublicMediaUrl(pharmacy.photo)}
                 onOpenDirections={handleOpenDirections}
                 onReserve={() => handleReserve()}
+                medicamentsCount={stockSummary.availableItemsCount}
               />
 
               <div className="grid gap-8 xl:grid-cols-[0.9fr_1.1fr]">
                 <PharmacyHoraires horaires={pharmacy.horaires || []} />
                 <PharmacyReviews
-                  avis={pharmacy.avis || []}
-                  noteMoyenne={pharmacy.note_moyenne}
-                  totalAvis={pharmacy.total_avis}
+                  avis={reviews}
+                  noteMoyenne={noteMoyenne}
+                  totalAvis={totalAvis}
+                  canReview={isAuthenticated && role === "utilisateur"}
+                  isAuthenticated={isAuthenticated}
+                  submittingReview={reviewSubmitting}
+                  reviewError={reviewError}
+                  reviewSuccess={reviewSuccess}
+                  onSubmitReview={handleSubmitReview}
+                  onGoToLogin={() => navigate("/login")}
                 />
               </div>
 
               <Card
                 title="Medicaments disponibles"
                 subtitle="Stocks publics recuperes depuis l'API des medicaments."
+                action={<Badge variant="blue">{stockSummary.availableItemsCount} disponible(s)</Badge>}
               >
+                {!stocksLoading && !stocksError && stocks.length > 0 && (
+                  <div className="mb-6 grid gap-4 lg:grid-cols-3">
+                    <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[#F7FBFD] p-4">
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-[#2F6E9E]">
+                        Produits visibles
+                      </p>
+                      <p className="mt-2 text-2xl font-black text-[#16324A]">
+                        {stocks.length}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[#F7FBFD] p-4">
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-[#2F6E9E]">
+                        Disponibles
+                      </p>
+                      <p className="mt-2 text-2xl font-black text-[#16324A]">
+                        {stockSummary.availableItemsCount}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[#F7FBFD] p-4">
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-[#2F6E9E]">
+                        Quantite totale
+                      </p>
+                      <p className="mt-2 text-2xl font-black text-[#16324A]">
+                        {stockSummary.totalQuantity}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {stocksLoading ? (
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {[1, 2, 3].map((item) => (
@@ -219,9 +324,14 @@ function PharmacyDetail() {
                     {stocksError}
                   </div>
                 ) : stocks.length === 0 ? (
-                  <p className="text-sm leading-7 text-pharmaTextLight">
-                    Aucun medicament disponible pour le moment dans cette pharmacie.
-                  </p>
+                  <div className="py-8 text-center">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#35C3A3]/15 text-[#13795f]">
+                      <FontAwesomeIcon icon={faCapsules} />
+                    </div>
+                    <p className="mt-4 text-sm leading-7 text-pharmaTextLight">
+                      Aucun medicament disponible pour le moment dans cette pharmacie.
+                    </p>
+                  </div>
                 ) : (
                   <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                     {stocks.map((stock) => (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -7,6 +7,7 @@ import {
   faRotateRight,
 } from "@fortawesome/free-solid-svg-icons";
 import Pagination from "../../components/common/Pagination";
+import Navbar from "../../components/layout/Navbar";
 import PharmacyCard from "../../components/pharmacies/PharmacyCard";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
@@ -52,6 +53,24 @@ function PharmacyList() {
   const estGarde = searchParams.get("est_garde") === "true";
   const isOpen = searchParams.get("is_open") === "true";
   const totalPages = Math.max(1, Math.ceil(pagination.count / PAGE_SIZE));
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+
+    if (searchParams.get("search")) {
+      count += 1;
+    }
+
+    if (estGarde) {
+      count += 1;
+    }
+
+    if (isOpen) {
+      count += 1;
+    }
+
+    return count;
+  }, [searchParams, estGarde, isOpen]);
 
   useEffect(() => {
     setSearchInput(searchParams.get("search") || "");
@@ -154,6 +173,8 @@ function PharmacyList() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(47,166,163,0.12),_transparent_28%),linear-gradient(180deg,_#f5fbff_0%,_#ffffff_44%,_#f7fcfb_100%)]">
+      <Navbar />
+
       <section className="mx-auto w-full max-w-7xl px-4 pb-8 pt-8 sm:px-6 lg:px-8">
         <div className="rounded-[2rem] border border-white/70 bg-[linear-gradient(135deg,_rgba(47,110,158,0.98),_rgba(47,166,163,0.92))] p-6 text-white shadow-[0_26px_80px_rgba(47,110,158,0.2)] sm:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
@@ -194,6 +215,24 @@ function PharmacyList() {
           className="border-[#2F6E9E]/10 bg-white/92 shadow-[0_18px_52px_rgba(47,110,158,0.1)]"
           bodyClassName="space-y-5"
         >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-xl font-black tracking-tight text-[#16324A]">
+                Rechercher une pharmacie
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-pharmaTextLight">
+                Utilisez les filtres disponibles pour trouver plus vite une pharmacie visible.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="blue">{pagination.count} resultat(s)</Badge>
+              {activeFiltersCount > 0 && (
+                <Badge variant="info">{activeFiltersCount} filtre(s) actif(s)</Badge>
+              )}
+            </div>
+          </div>
+
           <form onSubmit={handleSearchSubmit} className="space-y-5">
             <div className="flex flex-col gap-4 lg:flex-row">
               <Input
@@ -201,21 +240,20 @@ function PharmacyList() {
                 onChange={(event) => setSearchInput(event.target.value)}
                 placeholder="Rechercher par nom, adresse ou telephone"
                 className="flex-1"
+                helperText="La recherche s'appuie sur les donnees publiques de la pharmacie."
               />
               <Button type="submit" icon={faMagnifyingGlass} className="lg:min-w-[220px]">
                 Rechercher
               </Button>
             </div>
 
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex flex-wrap gap-3">
                 <Button
                   type="button"
                   variant={estGarde ? "secondary" : "outline"}
                   size="sm"
-                  onClick={() =>
-                    updateFilters({ est_garde: estGarde ? null : "true" })
-                  }
+                  onClick={() => updateFilters({ est_garde: estGarde ? null : "true" })}
                 >
                   {estGarde ? "Garde activee" : "Pharmacie de garde"}
                 </Button>
@@ -232,10 +270,9 @@ function PharmacyList() {
                 </Button>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="blue">Total: {pagination.count}</Badge>
-                {estGarde && <Badge variant="info">Filtre garde</Badge>}
-                {isOpen && <Badge variant="active">Filtre ouverte</Badge>}
+              <div className="rounded-2xl border border-[#E2E8F2] bg-[#F8FBFF] px-4 py-3 text-sm text-[#6B7A99]">
+                Page <span className="font-bold text-[#16324A]">{page}</span> sur{" "}
+                <span className="font-bold text-[#16324A]">{totalPages}</span>
               </div>
             </div>
           </form>
@@ -244,6 +281,26 @@ function PharmacyList() {
         {error && (
           <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
             {error}
+          </div>
+        )}
+
+        {!error && !loading && pharmacies.length > 0 && (
+          <div className="mt-6 rounded-[1.5rem] border border-[#2F6E9E]/10 bg-[linear-gradient(180deg,_rgba(247,251,253,0.96),_rgba(255,255,255,0.98))] px-4 py-4 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-black tracking-tight text-[#16324A]">
+                  Resultats publics
+                </p>
+                <p className="mt-1 text-sm text-pharmaTextLight">
+                  Consultez les pharmacies visibles et ouvrez leur fiche detaillee.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {estGarde && <Badge variant="info">Filtre garde</Badge>}
+                {isOpen && <Badge variant="active">Filtre ouverte</Badge>}
+              </div>
+            </div>
           </div>
         )}
 

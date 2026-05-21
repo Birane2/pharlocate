@@ -37,3 +37,24 @@ class NotificationCreateView(generics.CreateAPIView):
             },
             status=status.HTTP_201_CREATED
         )
+
+
+class NotificationMarkReadView(generics.UpdateAPIView):
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = Notification.objects.all()
+
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user)
+
+    def patch(self, request, *args, **kwargs):
+        notification = self.get_object()
+        notification.est_lue = True
+        notification.save(update_fields=["est_lue"])
+
+        return Response(
+            {
+                "message": "Notification marquee comme lue.",
+                "data": self.get_serializer(notification).data,
+            }
+        )

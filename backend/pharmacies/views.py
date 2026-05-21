@@ -1,3 +1,5 @@
+import math
+
 from django.db.models import Avg, F, Q
 from django.utils import timezone
 from rest_framework import generics, status, viewsets
@@ -15,6 +17,7 @@ from reviews.models import Avis
 from .models import Horaire, Pharmacy
 from .serializers import (
     HoraireSerializer,
+    NearbyPharmacySerializer,
     PharmacyDetailSerializer,
     PharmacyPhotoSerializer,
     PharmacyProfileSerializer,
@@ -41,6 +44,26 @@ def parse_bool_query_param(value):
         return False
 
     return None
+
+
+def calculate_distance_in_meters(origin_lat, origin_lng, target_lat, target_lng):
+    earth_radius_meters = 6371000
+
+    lat_1 = math.radians(origin_lat)
+    lng_1 = math.radians(origin_lng)
+    lat_2 = math.radians(target_lat)
+    lng_2 = math.radians(target_lng)
+
+    delta_lat = lat_2 - lat_1
+    delta_lng = lng_2 - lng_1
+
+    a = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat_1) * math.cos(lat_2) * math.sin(delta_lng / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    return round(earth_radius_meters * c, 1)
 
 
 class PharmacyListCreateView(generics.ListCreateAPIView):
@@ -163,6 +186,66 @@ class PharmacyDetailView(generics.RetrieveAPIView):
     )
     serializer_class = PharmacyDetailSerializer
     permission_classes = [AllowAny]
+
+
+class NearbyPharmacyListView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        lat = request.query_params.get('lat')
+        lng = request.query_params.get('lng')
+        radius = request.query_params.get('radius', 10000)
+
+        if lat in {None, ''} or lng in {None, ''}:
+            return Response(
+                {'error': 'Les parametres lat et lng sont obligatoires.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            origin_lat = float(lat)
+            origin_lng = float(lng)
+            radius_in_meters = max(float(radius), 0)
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'Les parametres lat, lng et radius doivent etre numeriques.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        queryset = (
+            Pharmacy.objects.filter(
+                est_valide=True,
+                statut_validation='validee',
+                latitude__isnull=False,
+                longitude__isnull=False,
+            )
+            .order_by('-date_validation', '-date_creation')
+        )
+
+        nearby_pharmacies = []
+
+        for pharmacy in queryset:
+            target_lat = float(pharmacy.latitude)
+            target_lng = float(pharmacy.longitude)
+            distance = calculate_distance_in_meters(
+                origin_lat,
+                origin_lng,
+                target_lat,
+                target_lng,
+            )
+
+            if distance <= radius_in_meters:
+                pharmacy.distance = distance
+                nearby_pharmacies.append(pharmacy)
+
+        nearby_pharmacies.sort(key=lambda pharmacy: pharmacy.distance)
+
+        serializer = NearbyPharmacySerializer(
+            nearby_pharmacies,
+            many=True,
+            context={'request': request},
+        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class HorairePagination(PageNumberPagination):

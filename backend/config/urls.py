@@ -17,6 +17,7 @@ urlpatterns = [
     path('api/stocks/', include('medicaments.stock_urls')),
     path('api/pharmacien/stocks/', include('medicaments.pharmacien_urls')),
     path('api/reservations/', include('reservations.urls')),
+    path('api/user/reservations/', include('reservations.user_urls')),
     path('api/pharmacien/reservations/', include('reservations.pharmacien_urls')),
     path('api/notifications/', include('notifications_app.urls')),
 ]

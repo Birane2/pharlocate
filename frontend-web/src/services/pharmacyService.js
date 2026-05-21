@@ -8,6 +8,18 @@ export const getPharmacies = async (params = {}) => {
   return res.data;
 };
 
+export const getNearbyPharmacies = async ({ lat, lng, radius = 10000 }) => {
+  const res = await API.get("/api/pharmacies/nearby/", {
+    params: { lat, lng, radius },
+  });
+
+  if (Array.isArray(res.data)) {
+    return res.data;
+  }
+
+  return res.data?.results || res.data?.data || [];
+};
+
 export const getPublicPharmacyDetail = async (id) => {
   const res = await API.get(`/api/pharmacies/${id}/`);
   return res.data;

@@ -4,24 +4,23 @@ import {
   faCartPlus,
   faCoins,
   faLayerGroup,
-  faShieldHeart,
 } from "@fortawesome/free-solid-svg-icons";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import Card from "../ui/Card";
+import QuantitySelector from "./QuantitySelector";
 import { getPublicMediaUrl } from "../../services/pharmacyService";
 
-function MedicamentCard({ stock, onReserve }) {
+function MedicamentReservationCard({
+  stock,
+  quantity,
+  inCart = false,
+  disabled = false,
+  onQuantityChange,
+  onAddToCart,
+}) {
   const isAvailable = Number(stock.quantite || 0) > 0;
-  const medicamentName = stock.medicament_nom || stock.medicament?.nom || "Medicament";
-  const medicamentDescription =
-    stock.medicament_description ||
-    stock.medicament?.description ||
-    "Aucune description disponible pour ce medicament.";
-  const medicamentCategory =
-    stock.medicament_categorie || stock.medicament?.categorie || "General";
-  const photoUrl = getPublicMediaUrl(stock.medicament_photo || stock.medicament?.photo);
-  const statusLabel = stock.status || stock.statut || (isAvailable ? "Disponible" : "Rupture");
+  const photoUrl = getPublicMediaUrl(stock.medicament_photo);
 
   return (
     <Card className="h-full border-[#2F6E9E]/10 bg-white/95">
@@ -31,7 +30,7 @@ function MedicamentCard({ stock, onReserve }) {
             <>
               <img
                 src={photoUrl}
-                alt={medicamentName}
+                alt={stock.medicament_nom}
                 className="h-40 w-full object-cover transition duration-500 hover:scale-[1.02]"
                 onError={(event) => {
                   event.currentTarget.style.display = "none";
@@ -59,57 +58,61 @@ function MedicamentCard({ stock, onReserve }) {
 
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={isAvailable ? "success" : "danger"} showIcon>
-            {statusLabel}
+            {stock.status || (isAvailable ? "Disponible" : "Rupture")}
           </Badge>
-          <Badge variant="blue">Quantite: {stock.quantite}</Badge>
+          <Badge variant="blue">Stock: {stock.quantite}</Badge>
+          {inCart && <Badge variant="info">Dans le panier</Badge>}
         </div>
 
         <div>
           <h3 className="text-xl font-black tracking-tight text-[#16324A]">
-            {medicamentName}
+            {stock.medicament_nom}
           </h3>
           <p className="mt-2 text-sm leading-7 text-pharmaTextLight">
-            {medicamentDescription}
+            {stock.medicament_description || "Aucune description disponible pour ce medicament."}
           </p>
         </div>
 
-        <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[#F7FBFD] p-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#2F6E9E]">
-            <FontAwesomeIcon icon={faShieldHeart} />
-            <span>Informations publiques du stock</span>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl bg-[#F7FBFD] px-3 py-3">
+            <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#2F6E9E]">
+              <FontAwesomeIcon icon={faCoins} />
+              Prix
+            </p>
+            <p className="mt-2 text-base font-black text-[#16324A]">{stock.prix}</p>
           </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl bg-white px-3 py-3">
-              <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#2F6E9E]">
-                <FontAwesomeIcon icon={faCoins} />
-                Prix
-              </p>
-              <p className="mt-2 text-base font-black text-[#16324A]">
-                {stock.prix}
-              </p>
-            </div>
-            <div className="rounded-2xl bg-white px-3 py-3">
-              <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#2F6E9E]">
-                <FontAwesomeIcon icon={faLayerGroup} />
-                Categorie
-              </p>
-              <p className="mt-2 text-base font-black text-[#16324A]">
-                {medicamentCategory}
-              </p>
-            </div>
+          <div className="rounded-2xl bg-[#F7FBFD] px-3 py-3">
+            <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#2F6E9E]">
+              <FontAwesomeIcon icon={faLayerGroup} />
+              Categorie
+            </p>
+            <p className="mt-2 text-base font-black text-[#16324A]">
+              {stock.medicament_categorie || "General"}
+            </p>
           </div>
         </div>
 
-        <div className="mt-auto">
+        <div className="space-y-3">
+          <div>
+            <p className="mb-2 text-sm font-semibold text-[#1C2B4A]">Quantite a reserver</p>
+            <QuantitySelector
+              value={quantity}
+              min={1}
+              max={Math.max(1, Number(stock.quantite || 1))}
+              disabled={!isAvailable || disabled}
+              onChange={onQuantityChange}
+            />
+          </div>
+
           <Button
             type="button"
-            variant="outline"
+            variant={inCart ? "secondary" : "outline"}
             className="w-full"
             icon={faCartPlus}
-            disabled={!isAvailable}
-            onClick={() => onReserve(stock)}
+            disabled={!isAvailable || disabled}
+            onClick={onAddToCart}
           >
-            Reserver ce medicament
+            {inCart ? "Mettre a jour le panier" : "Ajouter au panier"}
           </Button>
         </div>
       </div>
@@ -117,4 +120,4 @@ function MedicamentCard({ stock, onReserve }) {
   );
 }
 
-export default MedicamentCard;
+export default MedicamentReservationCard;

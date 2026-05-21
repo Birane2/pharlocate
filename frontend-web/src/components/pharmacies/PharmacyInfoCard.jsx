@@ -15,6 +15,7 @@ function PharmacyInfoCard({
   photoUrl,
   onOpenDirections,
   onReserve,
+  medicamentsCount = 0,
 }) {
   return (
     <Card
@@ -25,11 +26,7 @@ function PharmacyInfoCard({
       <div className="grid gap-0 lg:grid-cols-[0.95fr_1.05fr]">
         <div className="relative min-h-[260px] bg-[linear-gradient(145deg,_rgba(47,110,158,0.98),_rgba(47,166,163,0.92))]">
           {photoUrl ? (
-            <img
-              src={photoUrl}
-              alt={pharmacy.nom}
-              className="h-full w-full object-cover"
-            />
+            <img src={photoUrl} alt={pharmacy.nom} className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full min-h-[260px] items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_transparent_35%),linear-gradient(145deg,_rgba(47,110,158,0.98),_rgba(47,166,163,0.92))] p-8 text-white">
               <div className="max-w-xs text-center">
@@ -64,10 +61,7 @@ function PharmacyInfoCard({
               {pharmacy.nom}
             </h1>
             <p className="mt-4 flex items-start gap-3 text-sm leading-7 text-pharmaTextLight">
-              <FontAwesomeIcon
-                icon={faLocationDot}
-                className="mt-1 text-[#2F6E9E]"
-              />
+              <FontAwesomeIcon icon={faLocationDot} className="mt-1 text-[#2F6E9E]" />
               <span>{pharmacy.adresse}</span>
             </p>
             <p className="mt-3 flex items-center gap-3 text-sm text-pharmaTextLight">
@@ -75,10 +69,7 @@ function PharmacyInfoCard({
               <span>{pharmacy.telephone}</span>
             </p>
             <p className="mt-3 flex items-center gap-3 text-sm text-pharmaTextLight">
-              <FontAwesomeIcon
-                icon={faMapLocationDot}
-                className="text-[#1681FF]"
-              />
+              <FontAwesomeIcon icon={faMapLocationDot} className="text-[#1681FF]" />
               <span>
                 {pharmacy.latitude}, {pharmacy.longitude}
               </span>
@@ -107,7 +98,7 @@ function PharmacyInfoCard({
                 Medicaments
               </p>
               <p className="mt-2 text-2xl font-black text-[#16324A]">
-                {(pharmacy.stocks || []).length}
+                {medicamentsCount}
               </p>
             </div>
           </div>

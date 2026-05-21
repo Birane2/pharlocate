@@ -154,6 +154,26 @@ class PharmacySerializer(serializers.ModelSerializer):
         ).exists()
 
 
+class NearbyPharmacySerializer(PharmacySerializer):
+    distance = serializers.FloatField(read_only=True)
+
+    class Meta(PharmacySerializer.Meta):
+        model = Pharmacy
+        fields = [
+            'id',
+            'nom',
+            'adresse',
+            'latitude',
+            'longitude',
+            'telephone',
+            'est_valide',
+            'statut_validation',
+            'is_open',
+            'est_garde',
+            'distance',
+        ]
+
+
 class PublicPharmacyReviewSerializer(serializers.ModelSerializer):
     user_username = serializers.CharField(source='user.username', read_only=True)
 

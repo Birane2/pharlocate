@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import ReservationActions from "../../components/reservations/ReservationActions";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
@@ -115,14 +116,37 @@ function ReservationsList() {
     setSuccessMessage("");
 
     try {
-      await action(reservationId);
-      setSuccessMessage(successText);
+      const response = await action(reservationId);
+
+      if (response?.reservation) {
+        setReservations((currentReservations) =>
+          currentReservations.map((reservation) =>
+            reservation.id === reservationId ? response.reservation : reservation
+          )
+        );
+      }
+
+      setSuccessMessage(response?.message || successText);
       await loadReservations(pagination.currentPage);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
       setActionLoadingId(null);
     }
+  };
+
+  const handleConfirm = async (reservationId) => {
+    const confirmed = window.confirm("Voulez-vous vraiment confirmer cette reservation ?");
+
+    if (!confirmed) {
+      return;
+    }
+
+    await runAction(
+      reservationId,
+      confirmReservation,
+      "Reservation confirmee avec succes."
+    );
   };
 
   const handleCancel = async (reservationId) => {
@@ -137,78 +161,6 @@ function ReservationsList() {
       cancelReservation,
       "Reservation annulee avec succes."
     );
-  };
-
-  const renderActions = (reservation) => {
-    const disabled = actionLoadingId === reservation.id;
-
-    if (reservation.statut === "en_attente") {
-      return (
-        <>
-          <Button
-            className="px-4 py-2"
-            disabled={disabled}
-            onClick={() =>
-              runAction(
-                reservation.id,
-                confirmReservation,
-                "Reservation confirmee avec succes."
-              )
-            }
-          >
-            Confirmer
-          </Button>
-          <Button
-            variant="danger"
-            className="px-4 py-2"
-            disabled={disabled}
-            onClick={() => handleCancel(reservation.id)}
-          >
-            Refuser
-          </Button>
-        </>
-      );
-    }
-
-    if (reservation.statut === "confirmee") {
-      return (
-        <Button
-          variant="secondary"
-          className="px-4 py-2"
-          disabled={disabled}
-          onClick={() =>
-            runAction(
-              reservation.id,
-              markReservationReady,
-              "Reservation marquee comme prete."
-            )
-          }
-        >
-          Marquer prete
-        </Button>
-      );
-    }
-
-    if (reservation.statut === "prete") {
-      return (
-        <Button
-          variant="secondary"
-          className="bg-pharmaGreenLight px-4 py-2 hover:bg-pharmaTurquoise"
-          disabled={disabled}
-          onClick={() =>
-            runAction(
-              reservation.id,
-              markReservationPickedUp,
-              "Reservation marquee comme recuperee."
-            )
-          }
-        >
-          Marquer recuperee
-        </Button>
-      );
-    }
-
-    return null;
   };
 
   return (
@@ -286,7 +238,26 @@ function ReservationsList() {
                     >
                       Voir detail
                     </Button>
-                    {renderActions(reservation)}
+                    <ReservationActions
+                      reservation={reservation}
+                      loading={actionLoadingId === reservation.id}
+                      onConfirm={handleConfirm}
+                      onCancel={handleCancel}
+                      onReady={(reservationId) =>
+                        runAction(
+                          reservationId,
+                          markReservationReady,
+                          "Reservation marquee comme prete."
+                        )
+                      }
+                      onPickedUp={(reservationId) =>
+                        runAction(
+                          reservationId,
+                          markReservationPickedUp,
+                          "Reservation marquee comme recuperee."
+                        )
+                      }
+                    />
                   </div>
                 </div>
 

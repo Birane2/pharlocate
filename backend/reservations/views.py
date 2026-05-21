@@ -6,7 +6,11 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from config.permissions import IsAuthenticatedWithTokenMessage, IsPharmacien
+from config.permissions import (
+    IsAuthenticatedWithTokenMessage,
+    IsPharmacien,
+    IsUtilisateur,
+)
 from medicaments.models import Stock
 from notifications_app.models import Notification
 from .models import Reservation
@@ -61,6 +65,40 @@ class PharmacienReservationPagination(PageNumberPagination):
     max_page_size = 50
 
 
+class UserReservationPagination(PageNumberPagination):
+    page_size = 5
+    page_size_query_param = "page_size"
+    max_page_size = 20
+
+
+class UserReservationListView(generics.ListAPIView):
+    serializer_class = ReservationSerializer
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsUtilisateur]
+    pagination_class = UserReservationPagination
+
+    def get_queryset(self):
+        queryset = (
+            Reservation.objects.filter(user=self.request.user)
+            .select_related("pharmacie")
+            .prefetch_related("items__medicament")
+            .order_by("-date_reservation")
+        )
+
+        statut = self.request.query_params.get("statut")
+        search = self.request.query_params.get("search")
+
+        if statut:
+            queryset = queryset.filter(statut=statut)
+
+        if search:
+            queryset = queryset.filter(
+                Q(pharmacie__nom__icontains=search)
+                | Q(items__medicament__nom__icontains=search)
+            ).distinct()
+
+        return queryset
+
+
 class PharmacienReservationViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ReservationSerializer
     permission_classes = [IsAuthenticatedWithTokenMessage, IsPharmacien]
@@ -95,8 +133,14 @@ class PharmacienReservationViewSet(viewsets.ReadOnlyModelViewSet):
             type='info',
         )
 
-    def _serialize(self, reservation):
-        return Response(self.get_serializer(reservation).data)
+    def _reservation_response(self, reservation, message):
+        return Response(
+            {
+                'message': message,
+                'reservation': self.get_serializer(reservation).data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @transaction.atomic
     def _confirm_reservation(self, reservation):
@@ -139,11 +183,15 @@ class PharmacienReservationViewSet(viewsets.ReadOnlyModelViewSet):
 
         reservation.statut = 'confirmee'
         reservation.save(update_fields=['statut', 'date_modification'])
-        self._notify(
-            reservation,
-            f"Votre reservation #{reservation.id} a ete confirmee.",
+        Notification.objects.create(
+            user=reservation.user,
+            message=f"Votre reservation #{reservation.id} a ete confirmee.",
+            type='confirmation',
         )
-        return self._serialize(reservation)
+        return self._reservation_response(
+            reservation,
+            'Reservation confirmee avec succes.',
+        )
 
     @transaction.atomic
     def _cancel_reservation(self, reservation):
@@ -169,7 +217,10 @@ class PharmacienReservationViewSet(viewsets.ReadOnlyModelViewSet):
             reservation,
             f"Votre reservation #{reservation.id} a ete annulee.",
         )
-        return self._serialize(reservation)
+        return self._reservation_response(
+            reservation,
+            'Reservation annulee avec succes.',
+        )
 
     @action(detail=True, methods=['patch'])
     def confirm(self, request, pk=None):
@@ -192,7 +243,10 @@ class PharmacienReservationViewSet(viewsets.ReadOnlyModelViewSet):
         reservation.statut = 'prete'
         reservation.save(update_fields=['statut', 'date_modification'])
         self._notify(reservation, f"Votre reservation #{reservation.id} est prete.")
-        return self._serialize(reservation)
+        return self._reservation_response(
+            reservation,
+            'Reservation marquee comme prete.',
+        )
 
     @action(detail=True, methods=['patch'], url_path='picked-up')
     def picked_up(self, request, pk=None):
@@ -210,4 +264,7 @@ class PharmacienReservationViewSet(viewsets.ReadOnlyModelViewSet):
             reservation,
             f"Votre reservation #{reservation.id} a ete recuperee.",
         )
-        return self._serialize(reservation)
+        return self._reservation_response(
+            reservation,
+            'Reservation marquee comme recuperee.',
+        )

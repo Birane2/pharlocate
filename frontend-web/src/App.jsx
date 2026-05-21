@@ -16,7 +16,10 @@ import StockCreate from "./pages/pharmacien/StockCreate";
 import Home from "./pages/public/Home";
 import PharmacyList from "./pages/public/PharmacyList";
 import PharmacyDetail from "./pages/public/PharmacyDetail";
-import ReservationCreatePlaceholder from "./pages/public/ReservationCreatePlaceholder";
+import MapPage from "./pages/public/MapPage";
+import NewReservation from "./pages/user/NewReservation";
+import UserReservations from "./pages/user/UserReservations";
+import Notifications from "./pages/user/Notifications";
 
 function App() {
   return (
@@ -24,10 +27,37 @@ function App() {
       <Route path="/" element={<Home />} />
       <Route path="/pharmacies" element={<PharmacyList />} />
       <Route path="/pharmacies/:id" element={<PharmacyDetail />} />
-      <Route path="/reservations/new" element={<ReservationCreatePlaceholder />} />
+      <Route path="/map" element={<MapPage />} />
 
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+
+      <Route
+        path="/reservations/new/:pharmacyId"
+        element={
+          <ProtectedRoute allowedRoles={["utilisateur"]}>
+            <NewReservation />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/user/reservations"
+        element={
+          <ProtectedRoute allowedRoles={["utilisateur"]}>
+            <UserReservations />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute allowedRoles={["utilisateur"]}>
+            <Notifications />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/pharmacien/dashboard"

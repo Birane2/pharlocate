@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from pharmacies.models import Pharmacy
 from .models import Avis
 
 
@@ -19,3 +20,15 @@ class AvisSerializer(serializers.ModelSerializer):
             'date',
         ]
         read_only_fields = ['id', 'pharmacie_nom', 'user_username', 'date']
+
+    def validate_pharmacie(self, value):
+        if not Pharmacy.objects.filter(
+            pk=value.pk,
+            est_valide=True,
+            statut_validation='validee',
+        ).exists():
+            raise serializers.ValidationError(
+                "Cette pharmacie n'est pas disponible pour un avis public."
+            )
+
+        return value

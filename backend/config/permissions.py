@@ -41,3 +41,15 @@ class IsAdminRole(BasePermission):
             and getattr(request.user, "is_active", True)
             and getattr(request.user, "role", None) == "admin"
         )
+
+
+class IsUtilisateur(BasePermission):
+    message = "Seuls les utilisateurs peuvent acceder a cette ressource."
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and getattr(request.user, "is_active", True)
+            and getattr(request.user, "role", None) == "utilisateur"
+        )

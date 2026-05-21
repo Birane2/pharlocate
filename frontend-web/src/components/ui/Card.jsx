@@ -15,7 +15,7 @@ function Card({
         <header className="flex flex-col gap-3 border-b border-[#E2E8F2] px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
           <div>
             {title && (
-              <h2 className="font-syne text-lg font-bold tracking-tight text-[#0B1E3D]">
+              <h2 className="text-lg font-bold tracking-tight text-[#1C2B4A]">
                 {title}
               </h2>
             )}

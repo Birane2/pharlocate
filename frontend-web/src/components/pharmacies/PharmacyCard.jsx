@@ -10,7 +10,19 @@ import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import Card from "../ui/Card";
 
+function getAreaLabel(address) {
+  if (!address) {
+    return "Quartier non renseigne";
+  }
+
+  const [area] = String(address).split(",");
+  return area?.trim() || "Quartier non renseigne";
+}
+
 function PharmacyCard({ pharmacy, onViewDetails }) {
+  const areaLabel = getAreaLabel(pharmacy.adresse);
+  const hasCoordinates = Boolean(pharmacy.latitude && pharmacy.longitude);
+
   return (
     <Card className="h-full border-[#2F6E9E]/10 bg-white/95">
       <div className="flex h-full flex-col gap-5">
@@ -23,13 +35,16 @@ function PharmacyCard({ pharmacy, onViewDetails }) {
           </Badge>
           {pharmacy.est_garde && (
             <Badge variant="info" showIcon>
-              Pharmacie de garde
+              De garde
             </Badge>
           )}
         </div>
 
         <div>
-          <h2 className="text-xl font-black tracking-tight text-[#16324A]">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#2F6E9E]">
+            {areaLabel}
+          </p>
+          <h2 className="mt-2 text-xl font-black tracking-tight text-[#16324A]">
             {pharmacy.nom}
           </h2>
           <p className="mt-3 flex items-start gap-3 text-sm leading-7 text-pharmaTextLight">
@@ -53,12 +68,20 @@ function PharmacyCard({ pharmacy, onViewDetails }) {
           <p className="mt-2 text-sm leading-6 text-pharmaTextLight">
             Cette pharmacie est visible car elle a ete validee par l'administration.
           </p>
-          {pharmacy.est_garde && (
-            <p className="mt-3 flex items-center gap-2 text-sm font-medium text-[#1681FF]">
-              <FontAwesomeIcon icon={faClock} />
-              <span>Service de garde signale dans les horaires.</span>
-            </p>
-          )}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {pharmacy.est_garde && (
+              <span className="inline-flex items-center gap-2 rounded-full bg-[#2FA6A3]/10 px-3 py-1 text-xs font-semibold text-[#13795f]">
+                <FontAwesomeIcon icon={faClock} />
+                Service de garde signale
+              </span>
+            )}
+            {hasCoordinates && (
+              <span className="inline-flex items-center gap-2 rounded-full bg-[#2F6E9E]/10 px-3 py-1 text-xs font-semibold text-[#2F6E9E]">
+                Coordonnees disponibles
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="mt-auto">
