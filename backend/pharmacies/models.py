@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from .validators import round_coordinate_decimal
+
 
 class Pharmacy(models.Model):
     STATUT_VALIDATION_CHOICES = [
@@ -32,6 +34,15 @@ class Pharmacy(models.Model):
     date_modification = models.DateTimeField(auto_now=True)
     date_validation = models.DateTimeField(blank=True, null=True)
     date_suspension = models.DateTimeField(blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        if self.latitude is not None:
+            self.latitude = round_coordinate_decimal(self.latitude)
+
+        if self.longitude is not None:
+            self.longitude = round_coordinate_decimal(self.longitude)
+
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.nom

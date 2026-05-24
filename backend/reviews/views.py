@@ -13,10 +13,13 @@ class AvisListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         queryset = super().get_queryset().order_by('-date')
-        pharmacie_id = self.request.query_params.get('pharmacie')
+        pharmacie_id = (
+            self.request.query_params.get('pharmacie_id')
+            or self.request.query_params.get('pharmacie')
+        )
 
         if pharmacie_id:
-          queryset = queryset.filter(pharmacie_id=pharmacie_id)
+            queryset = queryset.filter(pharmacie_id=pharmacie_id)
 
         return queryset
 

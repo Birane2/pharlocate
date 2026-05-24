@@ -4,18 +4,34 @@ from .models import Medicament, Stock
 
 
 class MedicamentSerializer(serializers.ModelSerializer):
+    photo = serializers.ImageField(use_url=True, required=False)
+    photo_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Medicament
         fields = [
             'id',
             'nom',
             'photo',
+            'photo_url',
             'description',
             'categorie',
             'date_creation',
             'date_modification',
         ]
         read_only_fields = ['id', 'date_creation', 'date_modification']
+
+    def get_photo_url(self, obj):
+        if not obj.photo:
+            return None
+
+        request = self.context.get('request')
+        photo_url = obj.photo.url
+
+        if request is None:
+            return photo_url
+
+        return request.build_absolute_uri(photo_url)
 
     def validate_nom(self, value):
         normalized = value.strip()
@@ -34,15 +50,31 @@ class MedicamentSerializer(serializers.ModelSerializer):
 
 
 class MedicamentSummarySerializer(serializers.ModelSerializer):
+    photo = serializers.ImageField(use_url=True, required=False)
+    photo_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Medicament
         fields = [
             'id',
             'nom',
             'photo',
+            'photo_url',
             'description',
             'categorie',
         ]
+
+    def get_photo_url(self, obj):
+        if not obj.photo:
+            return None
+
+        request = self.context.get('request')
+        photo_url = obj.photo.url
+
+        if request is None:
+            return photo_url
+
+        return request.build_absolute_uri(photo_url)
 
 
 class StockSerializer(serializers.ModelSerializer):

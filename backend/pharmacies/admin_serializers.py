@@ -3,6 +3,11 @@ from rest_framework import serializers
 from medicaments.models import Stock
 from reservations.models import Reservation
 from .models import Horaire, Pharmacy
+from .validators import (
+    CoordinateDecimalField,
+    validate_latitude_value,
+    validate_longitude_value,
+)
 
 
 class AdminHoraireInlineSerializer(serializers.ModelSerializer):
@@ -95,6 +100,9 @@ class AdminPharmacyDetailSerializer(AdminPharmacyListSerializer):
 
 
 class AdminPharmacyUpdateSerializer(serializers.ModelSerializer):
+    latitude = CoordinateDecimalField(coordinate_label='Latitude')
+    longitude = CoordinateDecimalField(coordinate_label='Longitude')
+
     class Meta:
         model = Pharmacy
         fields = [
@@ -104,6 +112,12 @@ class AdminPharmacyUpdateSerializer(serializers.ModelSerializer):
             'longitude',
             'telephone',
         ]
+
+    def validate_latitude(self, value):
+        return validate_latitude_value(value)
+
+    def validate_longitude(self, value):
+        return validate_longitude_value(value)
 
 
 class PharmacyValidationSerializer(AdminPharmacyListSerializer):

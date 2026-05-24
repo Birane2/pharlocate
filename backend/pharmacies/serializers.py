@@ -6,6 +6,11 @@ from django.utils import timezone
 from medicaments.models import Stock
 from reviews.models import Avis
 from .models import Pharmacy, Horaire
+from .validators import (
+    CoordinateDecimalField,
+    validate_latitude_value,
+    validate_longitude_value,
+)
 
 
 class HoraireSerializer(serializers.ModelSerializer):
@@ -81,6 +86,8 @@ class HoraireSerializer(serializers.ModelSerializer):
 
 class PharmacySerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
+    latitude = CoordinateDecimalField(coordinate_label='Latitude')
+    longitude = CoordinateDecimalField(coordinate_label='Longitude')
     horaires = HoraireSerializer(many=True, read_only=True)
     is_open = serializers.SerializerMethodField()
     est_garde = serializers.SerializerMethodField()
@@ -117,6 +124,12 @@ class PharmacySerializer(serializers.ModelSerializer):
             'date_validation',
             'date_suspension',
         ]
+
+    def validate_latitude(self, value):
+        return validate_latitude_value(value)
+
+    def validate_longitude(self, value):
+        return validate_longitude_value(value)
 
     def get_is_open(self, obj):
         now = timezone.localtime()
@@ -253,6 +266,8 @@ class PharmacyDetailSerializer(PharmacySerializer):
 class PharmacyProfileSerializer(serializers.ModelSerializer):
     id_pharmacie = serializers.IntegerField(source='id', read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
+    latitude = CoordinateDecimalField(coordinate_label='Latitude')
+    longitude = CoordinateDecimalField(coordinate_label='Longitude')
 
     class Meta:
         model = Pharmacy
@@ -287,18 +302,10 @@ class PharmacyProfileSerializer(serializers.ModelSerializer):
         ]
 
     def validate_latitude(self, value):
-        if value < -90 or value > 90:
-            raise serializers.ValidationError(
-                'La latitude doit etre comprise entre -90 et 90.'
-            )
-        return value
+        return validate_latitude_value(value)
 
     def validate_longitude(self, value):
-        if value < -180 or value > 180:
-            raise serializers.ValidationError(
-                'La longitude doit etre comprise entre -180 et 180.'
-            )
-        return value
+        return validate_longitude_value(value)
 
     def validate_telephone(self, value):
         if not re.match(r'^\+?[0-9\s().-]{6,20}$', value):
