@@ -74,15 +74,20 @@ class StockListCreateView(generics.ListCreateAPIView):
                 pharmacie_id=pharmacie_id,
                 pharmacie__est_valide=True,
                 pharmacie__statut_validation='validee',
+                quantite__gt=0,
             ).order_by('-date_modification')
 
         if user.is_authenticated and getattr(user, 'role', None) == 'pharmacien':
             return queryset.filter(pharmacie__user=user)
 
-        return queryset
+        return queryset.filter(
+            pharmacie__est_valide=True,
+            pharmacie__statut_validation='validee',
+            quantite__gt=0,
+        ).order_by('-date_modification')
 
     def get_serializer_class(self):
-        if self.request.method == 'GET' and self.request.query_params.get('pharmacie_id'):
+        if self.request.method == 'GET':
             return PublicPharmacyStockSerializer
         return super().get_serializer_class()
 

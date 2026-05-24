@@ -248,6 +248,36 @@ class NearbyPharmacyListView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+class GuardPharmacyListView(generics.ListAPIView):
+    serializer_class = PharmacySerializer
+    permission_classes = [AllowAny]
+    pagination_class = PublicPharmacyPagination
+
+    def get_queryset(self):
+        now = timezone.localtime()
+        return (
+            Pharmacy.objects.select_related('user')
+            .prefetch_related('horaires')
+            .filter(
+                est_valide=True,
+                statut_validation='validee',
+                horaires__est_garde=True,
+            )
+            .filter(
+                Q(
+                    horaires__date_debut_garde__isnull=True,
+                    horaires__date_fin_garde__isnull=True,
+                )
+                | Q(
+                    horaires__date_debut_garde__lte=now,
+                    horaires__date_fin_garde__gte=now,
+                )
+            )
+            .order_by('-date_validation', '-date_creation')
+            .distinct()
+        )
+
+
 class HorairePagination(PageNumberPagination):
     page_size = 3
 
