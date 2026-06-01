@@ -1,6 +1,7 @@
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import Notification
 from .serializers import NotificationSerializer
@@ -56,5 +57,44 @@ class NotificationMarkReadView(generics.UpdateAPIView):
             {
                 "message": "Notification marquee comme lue.",
                 "data": self.get_serializer(notification).data,
+            }
+        )
+
+
+class NotificationMarkAllReadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, *args, **kwargs):
+        updated = Notification.objects.filter(
+            user=request.user,
+            est_lue=False,
+        ).update(est_lue=True)
+
+        return Response(
+            {
+                "message": "Toutes les notifications ont ete marquees comme lues.",
+                "updated": updated,
+            }
+        )
+
+
+class NotificationDeleteView(generics.DestroyAPIView):
+    permission_classes = [IsAuthenticated]
+    queryset = Notification.objects.all()
+
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user)
+
+
+class NotificationClearAllView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, *args, **kwargs):
+        deleted, _ = Notification.objects.filter(user=request.user).delete()
+
+        return Response(
+            {
+                "message": "Toutes les notifications ont ete supprimees.",
+                "deleted": deleted,
             }
         )
