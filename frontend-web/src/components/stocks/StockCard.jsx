@@ -78,7 +78,7 @@ function StockCard({ stock, onEdit, onDelete, deleting = false, active = false }
             <p className="text-xs font-black uppercase tracking-[0.14em] text-[#2F6E9E]">
               Prix
             </p>
-            <p className="mt-2 text-lg font-black text-[#16324A]">{stock.prix} DH</p>
+            <p className="mt-2 text-lg font-black text-[#16324A]">{stock.prix} MRU</p>
           </div>
           <div className="rounded-2xl border border-[#2F6E9E]/8 bg-[#F7FBFD] px-4 py-3">
             <p className="text-xs font-black uppercase tracking-[0.14em] text-[#2F6E9E]">

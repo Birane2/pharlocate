@@ -1,13 +1,173 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBoxesStacked, faCircleInfo } from "@fortawesome/free-solid-svg-icons";
-import StockCard from "./StockCard";
+import {
+  faCircleInfo,
+  faPen,
+  faTrash,
+} from "@fortawesome/free-solid-svg-icons";
 import StockFilters from "./StockFilters";
 import StockPagination from "./StockPagination";
 import StockSearchBar from "./StockSearchBar";
-import StockSkeleton from "./StockSkeleton";
 import EmptyStockState from "./EmptyStockState";
-import Badge from "../ui/Badge";
 import Card from "../ui/Card";
+import StockStatusBadge from "./StockStatusBadge";
+
+function getMedicament(stock) {
+  return stock.medicament_data || stock.medicament || {};
+}
+
+function formatPrice(value) {
+  const number = Number(value || 0);
+  return `${number.toFixed(2)} MRU`;
+}
+
+function ActionButton({ label, tone = "blue", icon, loading = false, onClick }) {
+  const toneClass =
+    tone === "danger"
+      ? "text-red-600 hover:bg-red-50 focus:ring-red-100"
+      : "text-[#2F6E9E] hover:bg-[#2F6E9E]/8 focus:ring-[#2F6E9E]/15";
+
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      disabled={loading}
+      onClick={onClick}
+      className={`flex h-8 w-8 items-center justify-center rounded-lg transition focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`}
+    >
+      <FontAwesomeIcon icon={icon} className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
+function StockTable({
+  stocks,
+  onEdit,
+  onDelete,
+  deletingStockId,
+}) {
+  return (
+    <>
+      <div className="hidden overflow-x-auto md:block">
+        <table className="min-w-full">
+          <thead className="bg-[#F8FAFC]">
+            <tr className="text-left text-xs font-bold uppercase tracking-[0.08em] text-[#6B7280]">
+              <th className="px-4 py-3">Medicament</th>
+              <th className="px-4 py-3">Description</th>
+              <th className="px-4 py-3">Quantite</th>
+              <th className="px-4 py-3">Prix MRU</th>
+              <th className="px-4 py-3">Seuil</th>
+              <th className="px-4 py-3">Statut</th>
+              <th className="px-4 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stocks.map((stock) => {
+              const medicament = getMedicament(stock);
+              const stockId = stock.id_stock || stock.id;
+
+              return (
+                <tr
+                  key={stockId}
+                  className="border-t border-[#E2E8F2] text-sm text-[#1C2B4A] transition hover:bg-[#F8FAFC]"
+                >
+                  <td className="px-4 py-2.5 font-bold text-[#2F6E9E]">
+                    {medicament.nom || stock.medicament_nom || "Medicament"}
+                  </td>
+                  <td className="max-w-xs px-4 py-2.5">
+                    <p className="truncate text-[#6B7280]">
+                      {medicament.description || "Aucune description"}
+                    </p>
+                  </td>
+                  <td className="px-4 py-2.5 font-black">{stock.quantite}</td>
+                  <td className="px-4 py-2.5 font-semibold">{formatPrice(stock.prix)}</td>
+                  <td className="px-4 py-2.5 font-semibold">{stock.seuil_alerte}</td>
+                  <td className="px-4 py-2.5">
+                    <StockStatusBadge stock={stock} />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex justify-end gap-1">
+                      <ActionButton
+                        label="Modifier"
+                        icon={faPen}
+                        onClick={() => onEdit(stock)}
+                      />
+                      <ActionButton
+                        label="Supprimer"
+                        tone="danger"
+                        icon={faTrash}
+                        loading={deletingStockId === stockId}
+                        onClick={() => onDelete(stock)}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="grid gap-2 p-3 md:hidden">
+        {stocks.map((stock) => {
+          const medicament = getMedicament(stock);
+          const stockId = stock.id_stock || stock.id;
+
+          return (
+            <article
+              key={stockId}
+              className="rounded-xl border border-[#E2E8F2] bg-white px-3 py-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-sm font-bold text-[#2F6E9E]">
+                    {medicament.nom || stock.medicament_nom || "Medicament"}
+                  </h3>
+                  <p className="mt-1 truncate text-xs text-[#6B7280]">
+                    {medicament.description || "Aucune description"}
+                  </p>
+                </div>
+                <div className="flex gap-1">
+                  <ActionButton
+                    label="Modifier"
+                    icon={faPen}
+                    onClick={() => onEdit(stock)}
+                  />
+                  <ActionButton
+                    label="Supprimer"
+                    tone="danger"
+                    icon={faTrash}
+                    loading={deletingStockId === stockId}
+                    onClick={() => onDelete(stock)}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <div>
+                  <p className="font-semibold text-[#6B7280]">Quantite</p>
+                  <p className="font-black text-[#1C2B4A]">{stock.quantite}</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-[#6B7280]">Prix</p>
+                  <p className="font-black text-[#1C2B4A]">{formatPrice(stock.prix)}</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-[#6B7280]">Seuil</p>
+                  <p className="font-black text-[#1C2B4A]">{stock.seuil_alerte}</p>
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <StockStatusBadge stock={stock} />
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </>
+  );
+}
 
 function StockDisponibles({
   stocks = [],
@@ -32,93 +192,72 @@ function StockDisponibles({
 
   return (
     <Card
-      title="Stocks disponibles"
-      subtitle="Recherchez, filtrez et gerez rapidement les medicaments deja presents dans votre pharmacie."
-      action={<Badge variant="blue">{count} stock(s)</Badge>}
       hover={false}
-      className="border-[#2F6E9E]/10 bg-white/95"
+      className="overflow-hidden border-[#2F6E9E]/10 bg-white"
+      bodyClassName="p-0"
     >
-      <div className="space-y-6">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-          <StockSearchBar value={search} onChange={onSearchChange} />
+      <div className="border-b border-[#E2E8F2] p-3">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0 flex-1">
+            <StockSearchBar value={search} onChange={onSearchChange} />
+          </div>
 
           <StockFilters
             statusFilter={statusFilter}
             onStatusChange={onStatusChange}
-            sortBy="recent"
-            onSortChange={() => {}}
             onReset={onResetFilters}
-            showSort={false}
           />
         </div>
+      </div>
 
-        <div className="rounded-[1.5rem] border border-[#2F6E9E]/10 bg-[linear-gradient(180deg,_rgba(247,251,253,0.98),_rgba(255,255,255,0.98))] px-4 py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#2F6E9E]/10 text-[#2F6E9E]">
-                <FontAwesomeIcon icon={faBoxesStacked} />
-              </div>
-              <div>
-                <p className="text-sm font-black tracking-tight text-[#16324A]">
-                  Inventaire affiche
-                </p>
-                <p className="text-sm text-pharmaTextLight">
-                  {count} resultat(s) correspondant a votre recherche.
-                </p>
-              </div>
-            </div>
+      <div className="flex items-center justify-between border-b border-[#E2E8F2] bg-[#F8FAFC] px-3 py-2">
+        <p className="text-xs font-bold text-[#1C2B4A]">
+          {count} stock(s)
+        </p>
+        <p className="text-xs font-semibold text-[#6B7280]">
+          Page {currentPage} / {totalPages}
+        </p>
+      </div>
 
-            <div className="rounded-full bg-[#2FA6A3]/10 px-3 py-1 text-xs font-black text-[#2FA6A3]">
-              Page {currentPage} / {totalPages}
-            </div>
+      {error && (
+        <div className="m-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          <div className="flex items-start gap-2">
+            <FontAwesomeIcon icon={faCircleInfo} className="mt-0.5" />
+            <span>{error}</span>
           </div>
         </div>
+      )}
 
-        {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
-            <div className="flex items-start gap-2">
-              <FontAwesomeIcon icon={faCircleInfo} className="mt-0.5" />
-              <span>{error}</span>
-            </div>
-          </div>
-        )}
-
-        {loading ? (
-          <div className="grid gap-4 xl:grid-cols-2">
-            {[1, 2, 3, 4, 5, 6].map((item) => (
-              <StockSkeleton key={item} />
-            ))}
-          </div>
-        ) : stocks.length === 0 ? (
+      {loading ? (
+        <div className="px-4 py-8 text-center text-sm text-[#6B7280]">
+          Chargement des stocks...
+        </div>
+      ) : stocks.length === 0 ? (
+        <div className="p-3">
           <EmptyStockState
             title="Aucun stock a afficher"
-            description="Aucun stock ne correspond aux filtres actuels pour cette page."
+            description="Aucun stock ne correspond aux filtres actuels."
           />
-        ) : (
-          <>
-            <div className="grid gap-4 xl:grid-cols-2">
-              {stocks.map((stock) => (
-                <StockCard
-                  key={stock.id_stock || stock.id}
-                  stock={stock}
-                  onEdit={onEdit}
-                  onDelete={onDelete}
-                  deleting={deletingStockId === (stock.id_stock || stock.id)}
-                />
-              ))}
-            </div>
+        </div>
+      ) : (
+        <>
+          <StockTable
+            stocks={stocks}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            deletingStockId={deletingStockId}
+          />
 
-            <StockPagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              hasPrevious={Boolean(previous)}
-              hasNext={Boolean(next)}
-              onPageChange={onPageChange}
-              disabled={loading}
-            />
-          </>
-        )}
-      </div>
+          <StockPagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            hasPrevious={Boolean(previous)}
+            hasNext={Boolean(next)}
+            onPageChange={onPageChange}
+            disabled={loading}
+          />
+        </>
+      )}
     </Card>
   );
 }

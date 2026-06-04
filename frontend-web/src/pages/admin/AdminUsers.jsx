@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faRotateRight,
+  faChevronLeft,
+  faChevronRight,
+  faUser,
+  faUserDoctor,
   faUserGroup,
+  faUserShield,
+  faUsers,
   faUsersGear,
 } from "@fortawesome/free-solid-svg-icons";
 import AdminUserDetailModal from "../../components/admin/AdminUserDetailModal";
 import AdminUserFilters from "../../components/admin/AdminUserFilters";
 import AdminUsersTable from "../../components/admin/AdminUsersTable";
 import ConfirmModal from "../../components/common/ConfirmModal";
-import Pagination from "../../components/common/Pagination";
-import Badge from "../../components/ui/Badge";
-import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import AdminLayout from "../../layouts/AdminLayout";
 import {
@@ -22,7 +24,7 @@ import {
   suspendAdminUser,
 } from "../../services/adminUserService";
 
-const PAGE_SIZE = 4;
+const PAGE_SIZE = 10;
 
 const emptyPagination = {
   count: 0,
@@ -61,6 +63,7 @@ function AdminUsers() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("");
+  const [statut, setStatut] = useState("");
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [error, setError] = useState("");
@@ -83,6 +86,7 @@ function AdminUsers() {
           pageSize: PAGE_SIZE,
           search,
           role,
+          statut,
         });
 
         setPagination(data);
@@ -96,7 +100,7 @@ function AdminUsers() {
         setLoading(false);
       }
     },
-    [search, role]
+    [search, role, statut]
   );
 
   useEffect(() => {
@@ -188,46 +192,90 @@ function AdminUsers() {
     },
   }[confirmState?.type] || {};
 
-  return (
-    <AdminLayout title="Gestion des utilisateurs">
-      <div className="space-y-6">
-        <section className="rounded-[1.5rem] bg-gradient-to-br from-[#2F6E9E] via-[#4A8BBE] to-[#2FA6A3] p-5 text-white shadow-[0_22px_60px_rgba(47,110,158,0.22)] sm:p-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <Badge variant="info" className="bg-white/15 text-white ring-white/20">
-                Administration
-              </Badge>
-              <h1 className="mt-4 text-2xl font-semibold tracking-normal md:text-3xl">
-                Gestion des utilisateurs
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm font-normal leading-6 text-white/85">
-                Supervisez les comptes, les roles et les statuts d'acces de PharmaLocate.
-              </p>
-            </div>
+  const kpis = useMemo(
+    () => [
+      {
+        label: "Total utilisateurs",
+        value: pagination.count,
+        icon: faUsers,
+        tone: "blue",
+      },
+      {
+        label: "Utilisateurs",
+        value: users.filter((user) => user.role === "utilisateur").length,
+        icon: faUser,
+        tone: "lightBlue",
+      },
+      {
+        label: "Pharmaciens",
+        value: users.filter((user) => user.role === "pharmacien").length,
+        icon: faUserDoctor,
+        tone: "turquoise",
+      },
+      {
+        label: "Administrateurs",
+        value: users.filter((user) => user.role === "admin").length,
+        icon: faUserShield,
+        tone: "darkBlue",
+      },
+    ],
+    [pagination.count, users]
+  );
 
-            <Button
-              variant="outline"
-              className="border-white bg-white/10 text-white hover:bg-white hover:text-[#2F6E9E]"
-              icon={faRotateRight}
-              onClick={() => loadUsers(page)}
-              loading={loading}
-            >
-              Actualiser
-            </Button>
-          </div>
+  const firstItem = pagination.count === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastItem = Math.min(page * PAGE_SIZE, pagination.count);
+
+  return (
+    <AdminLayout
+      title="Utilisateurs"
+      subtitle="Gerez les comptes utilisateurs, pharmaciens et administrateurs."
+    >
+      <div className="space-y-3">
+        <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {kpis.map((item) => {
+            const toneClass =
+              item.tone === "turquoise"
+                ? "bg-[#2FA6A3]/10 text-[#2FA6A3]"
+                : item.tone === "lightBlue"
+                  ? "bg-[#4A8BBE]/10 text-[#4A8BBE]"
+                  : item.tone === "darkBlue"
+                    ? "bg-[#1C2B4A]/10 text-[#1C2B4A]"
+                    : "bg-[#2F6E9E]/10 text-[#2F6E9E]";
+
+            return (
+              <article
+                key={item.label}
+                className="rounded-2xl border border-[#E2E8F2] bg-white px-4 py-3 shadow-sm"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-2xl font-black text-[#1C2B4A]">{item.value}</p>
+                    <p className="mt-0.5 text-xs font-bold text-[#6B7280]">
+                      {item.label}
+                    </p>
+                  </div>
+                  <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${toneClass}`}>
+                    <FontAwesomeIcon icon={item.icon} className="h-4 w-4" />
+                  </span>
+                </div>
+              </article>
+            );
+          })}
         </section>
 
         <AdminUserFilters
           search={search}
           role={role}
+          statut={statut}
           loading={loading}
-          onSearchChange={setSearch}
-          onRoleChange={setRole}
-          onSubmit={() => loadUsers(1)}
-          onReset={() => {
-            setSearch("");
-            setRole("");
-            window.setTimeout(() => loadUsers(1), 0);
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(1);
+          }}
+          onFilterChange={(filter) => {
+            setRole(filter.role);
+            setStatut(filter.statut);
+            setPage(1);
           }}
         />
 
@@ -245,7 +293,7 @@ function AdminUsers() {
 
         {loading ? (
           <Card hover={false}>
-            <div className="flex h-48 items-center justify-center text-sm font-semibold text-[#2F6E9E]">
+            <div className="flex h-40 items-center justify-center text-sm font-semibold text-[#2F6E9E]">
               Chargement des utilisateurs...
             </div>
           </Card>
@@ -265,7 +313,7 @@ function AdminUsers() {
           </Card>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#2F6E9E]/10 bg-white/90 px-4 py-3">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#E2E8F2] bg-white px-4 py-3 shadow-sm">
               <div className="flex items-center gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#2F6E9E]/10 text-[#2F6E9E]">
                   <FontAwesomeIcon icon={faUsersGear} />
@@ -275,7 +323,7 @@ function AdminUsers() {
                     {pagination.count} utilisateur{pagination.count > 1 ? "s" : ""}
                   </p>
                   <p className="text-xs font-medium text-pharmaTextLight">
-                    Liste synchronisee avec l'API admin
+                    Affichage de {firstItem} a {lastItem} sur {pagination.count}
                   </p>
                 </div>
               </div>
@@ -290,14 +338,36 @@ function AdminUsers() {
               onDelete={(user) => openConfirm("delete", user)}
             />
 
-            <Pagination
-              page={page}
-              totalPages={totalPages}
-              previous={pagination.previous}
-              next={pagination.next}
-              loading={loading}
-              onPageChange={loadUsers}
-            />
+            <div className="flex flex-col gap-2 rounded-2xl border border-[#E2E8F2] bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs font-semibold text-[#6B7280]">
+                Affichage de {firstItem} a {lastItem} sur {pagination.count} utilisateurs
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <p className="text-xs font-semibold text-[#6B7280]">
+                  Page {page} sur {totalPages}
+                </p>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    disabled={!pagination.previous || loading}
+                    onClick={() => loadUsers(page - 1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#2F6E9E]/15 bg-white text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#2F6E9E]"
+                    aria-label="Page precedente"
+                  >
+                    <FontAwesomeIcon icon={faChevronLeft} className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!pagination.next || loading}
+                    onClick={() => loadUsers(page + 1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#2F6E9E]/15 bg-white text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#2F6E9E]"
+                    aria-label="Page suivante"
+                  >
+                    <FontAwesomeIcon icon={faChevronRight} className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
           </>
         )}
       </div>

@@ -3,13 +3,31 @@ import Topbar from "./Topbar";
 import MobileNav from "./MobileNav";
 import PharmacienLayout from "../../layouts/PharmacienLayout";
 
-function DashboardLayout({ title, links, children }) {
+function DashboardLayout({
+  title,
+  links,
+  pharmacy,
+  pharmacyHeader = false,
+  headerSubtitle,
+  showHeaderSubtitle = true,
+  children,
+}) {
   const isPharmacienLayout = links.some((link) =>
     link.path?.startsWith("/pharmacien/")
   );
 
   if (isPharmacienLayout) {
-    return <PharmacienLayout title={title}>{children}</PharmacienLayout>;
+    return (
+      <PharmacienLayout
+        title={title}
+        pharmacy={pharmacy}
+        pharmacyHeader={pharmacyHeader}
+        headerSubtitle={headerSubtitle}
+        showHeaderSubtitle={showHeaderSubtitle}
+      >
+        {children}
+      </PharmacienLayout>
+    );
   }
 
   return (

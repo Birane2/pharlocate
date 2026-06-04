@@ -23,6 +23,7 @@ export const getAdminUsers = async ({
   pageSize = 4,
   search = "",
   role = "",
+  statut = "",
 } = {}) => {
   const res = await API.get("/api/admin/users/", {
     params: {
@@ -30,6 +31,7 @@ export const getAdminUsers = async ({
       page_size: pageSize,
       search: search || undefined,
       role: role || undefined,
+      statut: statut || undefined,
     },
   });
 

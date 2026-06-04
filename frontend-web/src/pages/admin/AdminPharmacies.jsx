@@ -1,13 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faClinicMedical, faRotateRight } from "@fortawesome/free-solid-svg-icons";
+import {
+  faBan,
+  faChevronLeft,
+  faChevronRight,
+  faCircleCheck,
+  faClinicMedical,
+  faClock,
+  faHospital,
+} from "@fortawesome/free-solid-svg-icons";
 import AdminPharmacyDetailModal from "../../components/admin/AdminPharmacyDetailModal";
 import AdminPharmacyFilters from "../../components/admin/AdminPharmacyFilters";
 import AdminPharmacyTable from "../../components/admin/AdminPharmacyTable";
 import ConfirmModal from "../../components/common/ConfirmModal";
-import Pagination from "../../components/common/Pagination";
-import Badge from "../../components/ui/Badge";
-import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import AdminLayout from "../../layouts/AdminLayout";
 import {
@@ -19,7 +24,7 @@ import {
   validateAdminPharmacy,
 } from "../../services/adminPharmacyService";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 
 const emptyPagination = {
   count: 0,
@@ -183,45 +188,88 @@ function AdminPharmacies() {
     },
   }[confirmState?.type] || {};
 
-  return (
-    <AdminLayout title="Gestion des pharmacies">
-      <div className="space-y-6">
-        <section className="rounded-[1.75rem] bg-gradient-to-br from-[#2F6E9E] via-[#0085AA] to-[#35C3A3] p-5 text-white shadow-[0_22px_60px_rgba(47,110,158,0.22)] sm:p-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <Badge variant="info" className="bg-white/15 text-white ring-white/20">
-                Administration
-              </Badge>
-              <h1 className="mt-4 text-2xl font-semibold tracking-tight md:text-3xl">
-                Gestion des pharmacies
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm font-normal leading-6 text-white/85">
-                Consultez, filtrez et administrez toutes les pharmacies de la plateforme.
-              </p>
-            </div>
+  const kpis = useMemo(
+    () => [
+      {
+        label: "Total pharmacies",
+        value: pagination.count,
+        icon: faHospital,
+        tone: "blue",
+      },
+      {
+        label: "Validees",
+        value: pharmacies.filter((item) => item.est_valide || item.statut_validation === "validee").length,
+        icon: faCircleCheck,
+        tone: "green",
+      },
+      {
+        label: "En attente",
+        value: pharmacies.filter((item) => item.statut_validation === "en_attente").length,
+        icon: faClock,
+        tone: "orange",
+      },
+      {
+        label: "Suspendues",
+        value: pharmacies.filter((item) => item.statut_validation === "suspendue").length,
+        icon: faBan,
+        tone: "danger",
+      },
+    ],
+    [pagination.count, pharmacies]
+  );
 
-            <Button
-              variant="outline"
-              className="border-white bg-white/10 text-white hover:bg-white hover:text-[#2F6E9E]"
-              icon={faRotateRight}
-              onClick={() => loadPharmacies(page)}
-              loading={loading}
-            >
-              Actualiser
-            </Button>
-          </div>
+  const firstItem = pagination.count === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastItem = Math.min(page * PAGE_SIZE, pagination.count);
+
+  return (
+    <AdminLayout
+      title="Pharmacies"
+      subtitle="Gerez les pharmacies enregistrees sur PharmaLocate."
+    >
+      <div className="space-y-3">
+        <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {kpis.map((item) => {
+            const toneClass =
+              item.tone === "green"
+                ? "bg-[#10B981]/10 text-[#047857]"
+                : item.tone === "orange"
+                  ? "bg-[#F59E0B]/12 text-[#B45309]"
+                  : item.tone === "danger"
+                    ? "bg-[#EF4444]/10 text-[#DC2626]"
+                    : "bg-[#2F6E9E]/10 text-[#2F6E9E]";
+
+            return (
+              <article
+                key={item.label}
+                className="rounded-2xl border border-[#E2E8F2] bg-white px-4 py-3 shadow-sm"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-2xl font-black text-[#1C2B4A]">{item.value}</p>
+                    <p className="mt-0.5 text-xs font-bold text-[#6B7280]">
+                      {item.label}
+                    </p>
+                  </div>
+                  <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${toneClass}`}>
+                    <FontAwesomeIcon icon={item.icon} className="h-4 w-4" />
+                  </span>
+                </div>
+              </article>
+            );
+          })}
         </section>
 
         <AdminPharmacyFilters
           search={search}
           statutValidation={statutValidation}
-          onSearchChange={setSearch}
-          onStatusChange={setStatutValidation}
-          onSubmit={() => loadPharmacies(1)}
-          onReset={() => {
-            setSearch("");
-            setStatutValidation("");
-            window.setTimeout(() => loadPharmacies(1), 0);
+          loading={loading}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(1);
+          }}
+          onStatusChange={(value) => {
+            setStatutValidation(value);
+            setPage(1);
           }}
         />
 
@@ -239,7 +287,7 @@ function AdminPharmacies() {
 
         {loading ? (
           <Card hover={false}>
-            <div className="flex h-48 items-center justify-center text-sm font-semibold text-pharmaBlue">
+            <div className="flex h-40 items-center justify-center text-sm font-semibold text-pharmaBlue">
               Chargement des pharmacies...
             </div>
           </Card>
@@ -261,6 +309,7 @@ function AdminPharmacies() {
           <>
             <AdminPharmacyTable
               pharmacies={pharmacies}
+              actionLoading={actionLoading}
               onView={openDetail}
               onValidate={(pharmacy) => openConfirm("validate", pharmacy)}
               onSuspend={(pharmacy) => openConfirm("suspend", pharmacy)}
@@ -268,14 +317,36 @@ function AdminPharmacies() {
               onDelete={(pharmacy) => openConfirm("delete", pharmacy)}
             />
 
-            <Pagination
-              page={page}
-              totalPages={totalPages}
-              previous={pagination.previous}
-              next={pagination.next}
-              loading={loading}
-              onPageChange={loadPharmacies}
-            />
+            <div className="flex flex-col gap-2 rounded-2xl border border-[#E2E8F2] bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs font-semibold text-[#6B7280]">
+                Affichage de {firstItem} a {lastItem} sur {pagination.count} pharmacies
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <p className="text-xs font-semibold text-[#6B7280]">
+                  Page {page} sur {totalPages}
+                </p>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    disabled={!pagination.previous || loading}
+                    onClick={() => loadPharmacies(page - 1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#2F6E9E]/15 bg-white text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#2F6E9E]"
+                    aria-label="Page precedente"
+                  >
+                    <FontAwesomeIcon icon={faChevronLeft} className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!pagination.next || loading}
+                    onClick={() => loadPharmacies(page + 1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#2F6E9E]/15 bg-white text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#2F6E9E]"
+                    aria-label="Page suivante"
+                  >
+                    <FontAwesomeIcon icon={faChevronRight} className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
           </>
         )}
       </div>

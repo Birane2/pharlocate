@@ -1,12 +1,10 @@
 import {
+  faBan,
+  faCheck,
   faEye,
-  faLock,
   faTrash,
-  faUnlock,
 } from "@fortawesome/free-solid-svg-icons";
-import Badge from "../ui/Badge";
-import Button from "../ui/Button";
-import Card from "../ui/Card";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
 const roleLabels = {
   admin: "Admin",
@@ -16,7 +14,7 @@ const roleLabels = {
 
 function formatDate(value) {
   if (!value) {
-    return "Non renseignee";
+    return "-";
   }
 
   return new Intl.DateTimeFormat("fr-FR", {
@@ -26,138 +24,227 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
-function getRoleVariant(role) {
+function getUserInitials(user) {
+  const name = user.nom_complet || user.username || "Utilisateur";
+
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+function getRoleClass(role) {
   if (role === "admin") {
-    return "blue";
+    return "bg-[#2F6E9E]/12 text-[#245B82]";
   }
 
   if (role === "pharmacien") {
-    return "info";
+    return "bg-[#2FA6A3]/10 text-[#2FA6A3]";
   }
 
-  return "success";
+  return "bg-[#4A8BBE]/10 text-[#2F6E9E]";
+}
+
+function getStatusClass(statut) {
+  if (statut === "suspendu") {
+    return "bg-[#EF4444]/10 text-[#DC2626]";
+  }
+
+  if (statut === "en_attente") {
+    return "bg-[#F59E0B]/12 text-[#B45309]";
+  }
+
+  return "bg-[#10B981]/10 text-[#047857]";
+}
+
+function Badge({ children, className }) {
+  return (
+    <span className={`inline-flex min-w-20 justify-center rounded-full px-3 py-1 text-xs font-bold ${className}`}>
+      {children}
+    </span>
+  );
+}
+
+function IconButton({ label, icon, tone = "blue", loading = false, onClick }) {
+  const toneClass =
+    tone === "danger"
+      ? "text-[#DC2626] hover:bg-[#EF4444]/10 focus:ring-[#EF4444]/15"
+      : tone === "success"
+        ? "text-[#047857] hover:bg-[#10B981]/10 focus:ring-[#10B981]/15"
+        : tone === "warning"
+          ? "text-[#B45309] hover:bg-[#F59E0B]/12 focus:ring-[#F59E0B]/15"
+          : "text-[#2F6E9E] hover:bg-[#2F6E9E]/8 focus:ring-[#2F6E9E]/15";
+
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      disabled={loading}
+      onClick={onClick}
+      className={`flex h-8 w-8 items-center justify-center rounded-lg transition focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`}
+    >
+      <FontAwesomeIcon icon={icon} className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
+function UserActions({ user, loadingActionId, onView, onActivate, onSuspend, onDelete }) {
+  const isSuspended = user.statut === "suspendu";
+  const isLoading = loadingActionId === user.id;
+
+  return (
+    <div className="flex flex-wrap justify-end gap-1">
+      <IconButton
+        label="Voir detail"
+        icon={faEye}
+        loading={isLoading}
+        onClick={() => onView(user)}
+      />
+      {isSuspended ? (
+        <IconButton
+          label="Activer"
+          icon={faCheck}
+          tone="success"
+          loading={isLoading}
+          onClick={() => onActivate(user)}
+        />
+      ) : (
+        <IconButton
+          label="Suspendre"
+          icon={faBan}
+          tone="warning"
+          loading={isLoading}
+          onClick={() => onSuspend(user)}
+        />
+      )}
+      <IconButton
+        label="Supprimer"
+        icon={faTrash}
+        tone="danger"
+        loading={isLoading}
+        onClick={() => onDelete(user)}
+      />
+    </div>
+  );
 }
 
 function AdminUsersTable({ users, loadingActionId, onView, onActivate, onSuspend, onDelete }) {
   return (
-    <Card hover={false} bodyClassName="p-0 sm:p-0">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-[#2F6E9E]/10">
-          <thead className="bg-[#F8FBFD]">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-[#2F6E9E]">
-                Utilisateur
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-[#2F6E9E]">
-                Role
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-[#2F6E9E]">
-                Statut
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-[#2F6E9E]">
-                Pharmacie
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-[#2F6E9E]">
-                Creation
-              </th>
-              <th className="px-4 py-3 text-right text-xs font-black uppercase tracking-wide text-[#2F6E9E]">
-                Actions
-              </th>
+    <section className="overflow-hidden rounded-2xl border border-[#E2E8F2] bg-white shadow-sm">
+      <div className="hidden overflow-x-auto md:block">
+        <table className="min-w-full">
+          <thead className="bg-[#F8FAFC]">
+            <tr className="text-left text-xs font-bold uppercase tracking-[0.08em] text-[#6B7280]">
+              <th className="px-4 py-3">Utilisateur</th>
+              <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">Role</th>
+              <th className="px-4 py-3">Statut</th>
+              <th className="px-4 py-3">Date creation</th>
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
 
-          <tbody className="divide-y divide-[#2F6E9E]/10 bg-white">
-            {users.map((user) => {
-              const isSuspended = user.statut === "suspendu";
-              const isLoading = loadingActionId === user.id;
-
-              return (
-                <tr key={user.id} className="transition hover:bg-[#2FA6A3]/5">
-                  <td className="px-4 py-4">
-                    <div>
-                      <p className="text-sm font-black text-pharmaText">
+          <tbody>
+            {users.map((user) => (
+              <tr
+                key={user.id}
+                className="border-t border-[#E2E8F2] text-sm text-[#1C2B4A] transition hover:bg-[#F8FAFC]"
+              >
+                <td className="px-4 py-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2F6E9E]/10 text-xs font-black text-[#2F6E9E]">
+                      {getUserInitials(user)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-bold">
                         {user.nom_complet || user.username}
                       </p>
-                      <p className="mt-1 text-xs font-medium text-pharmaTextLight">
-                        @{user.username} - {user.email || "Email non renseigne"}
+                      <p className="truncate text-xs font-semibold text-[#6B7280]">
+                        @{user.username}
                       </p>
                     </div>
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <Badge variant={getRoleVariant(user.role)} showIcon>
-                      {roleLabels[user.role] || user.role}
-                    </Badge>
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <Badge variant={isSuspended ? "danger" : "active"} showIcon>
-                      {isSuspended ? "Suspendu" : "Actif"}
-                    </Badge>
-                  </td>
-
-                  <td className="px-4 py-4 text-sm font-medium text-pharmaTextLight">
-                    {user.role === "pharmacien"
-                      ? user.pharmacy_name || "Aucune pharmacie"
-                      : "Non applicable"}
-                  </td>
-
-                  <td className="px-4 py-4 text-sm font-medium text-pharmaTextLight">
-                    {formatDate(user.date_creation)}
-                  </td>
-
-                  <td className="px-4 py-4">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        icon={faEye}
-                        disabled={isLoading}
-                        onClick={() => onView(user)}
-                      >
-                        Voir detail
-                      </Button>
-
-                      {isSuspended ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          icon={faUnlock}
-                          loading={isLoading}
-                          onClick={() => onActivate(user)}
-                        >
-                          Activer
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          icon={faLock}
-                          loading={isLoading}
-                          onClick={() => onSuspend(user)}
-                        >
-                          Suspendre
-                        </Button>
-                      )}
-
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        icon={faTrash}
-                        loading={isLoading}
-                        onClick={() => onDelete(user)}
-                      >
-                        Supprimer
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
+                  </div>
+                </td>
+                <td className="max-w-xs truncate px-4 py-2.5 font-semibold text-[#6B7280]">
+                  {user.email || "Email non renseigne"}
+                </td>
+                <td className="px-4 py-2.5">
+                  <Badge className={getRoleClass(user.role)}>
+                    {roleLabels[user.role] || user.role}
+                  </Badge>
+                </td>
+                <td className="px-4 py-2.5">
+                  <Badge className={getStatusClass(user.statut)}>
+                    {user.statut === "suspendu" ? "Suspendu" : "Actif"}
+                  </Badge>
+                </td>
+                <td className="px-4 py-2.5 text-xs font-bold text-[#6B7280]">
+                  {formatDate(user.date_creation)}
+                </td>
+                <td className="px-4 py-2.5">
+                  <UserActions
+                    user={user}
+                    loadingActionId={loadingActionId}
+                    onView={onView}
+                    onActivate={onActivate}
+                    onSuspend={onSuspend}
+                    onDelete={onDelete}
+                  />
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
-    </Card>
+
+      <div className="grid gap-2 p-3 md:hidden">
+        {users.map((user) => (
+          <article
+            key={user.id}
+            className="rounded-xl border border-[#E2E8F2] px-3 py-3"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2F6E9E]/10 text-xs font-black text-[#2F6E9E]">
+                  {getUserInitials(user)}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-[#1C2B4A]">
+                    {user.nom_complet || user.username}
+                  </p>
+                  <p className="truncate text-xs font-semibold text-[#6B7280]">
+                    {user.email || "Email non renseigne"}
+                  </p>
+                </div>
+              </div>
+              <UserActions
+                user={user}
+                loadingActionId={loadingActionId}
+                onView={onView}
+                onActivate={onActivate}
+                onSuspend={onSuspend}
+                onDelete={onDelete}
+              />
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Badge className={getRoleClass(user.role)}>
+                {roleLabels[user.role] || user.role}
+              </Badge>
+              <Badge className={getStatusClass(user.statut)}>
+                {user.statut === "suspendu" ? "Suspendu" : "Actif"}
+              </Badge>
+              <span className="text-xs font-bold text-[#6B7280]">
+                {formatDate(user.date_creation)}
+              </span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

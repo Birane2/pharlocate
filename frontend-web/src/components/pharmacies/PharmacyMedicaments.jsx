@@ -55,7 +55,7 @@ function PharmacyMedicaments({ stocks = [], onReserve }) {
                     Prix
                   </p>
                   <p className="mt-2 text-base font-black text-[#16324A]">
-                    {stock.prix} DH
+                    {stock.prix} MRU
                   </p>
                 </div>
                 <div className="rounded-xl bg-white px-3 py-3">

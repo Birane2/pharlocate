@@ -37,6 +37,46 @@ class PharmacyCoordinatesApiTests(APITestCase):
         self.assertEqual(str(response.data['data']['latitude']), '18.073513')
         self.assertEqual(str(response.data['data']['longitude']), '-15.958246')
 
+    def test_create_pharmacy_accepts_el_menar_coordinates(self):
+        response = self.client.post(
+            reverse('pharmacy_list_create'),
+            {
+                'nom': 'Pharmacie El Menar',
+                'adresse': 'Nouakchott',
+                'telephone': '22234567',
+                'latitude': 18.114961,
+                'longitude': -15.961197,
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        pharmacy = Pharmacy.objects.get(user=self.pharmacien)
+        self.assertEqual(str(pharmacy.latitude), '18.114961')
+        self.assertEqual(str(pharmacy.longitude), '-15.961197')
+        self.assertEqual(str(response.data['data']['latitude']), '18.114961')
+        self.assertEqual(str(response.data['data']['longitude']), '-15.961197')
+
+    def test_create_pharmacy_accepts_empty_coordinates(self):
+        response = self.client.post(
+            reverse('pharmacy_list_create'),
+            {
+                'nom': 'Pharmacie Sans Position',
+                'adresse': 'Nouakchott',
+                'telephone': '22234567',
+                'latitude': '',
+                'longitude': '',
+            },
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        pharmacy = Pharmacy.objects.get(user=self.pharmacien)
+        self.assertIsNone(pharmacy.latitude)
+        self.assertIsNone(pharmacy.longitude)
+
     def test_create_pharmacy_rejects_out_of_range_latitude_with_clear_message(self):
         response = self.client.post(
             reverse('pharmacy_list_create'),

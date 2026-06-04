@@ -5,6 +5,7 @@ import {
   faCheckCircle,
   faClinicMedical,
   faClock,
+  faStar,
   faUsers,
 } from "@fortawesome/free-solid-svg-icons";
 
@@ -34,10 +35,16 @@ export const pharmacistLinks = [
     icon: faBoxesStacked,
   },
   {
-    label: "Réservations",
-    shortLabel: "Réserv.",
+    label: "Reservations",
+    shortLabel: "Reserv.",
     path: "/pharmacien/reservations",
     icon: faCalendarCheck,
+  },
+  {
+    label: "Avis",
+    shortLabel: "Avis",
+    path: "/pharmacien/avis",
+    icon: faStar,
   },
 ];
 

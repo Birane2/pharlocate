@@ -15,9 +15,9 @@ const variants = {
 };
 
 const sizes = {
-  sm: "px-4 py-2.5 text-sm",
-  md: "px-6 py-3 text-sm",
-  lg: "px-6 py-3 text-base",
+  sm: "px-3 py-2 text-xs",
+  md: "px-4 py-2.5 text-sm",
+  lg: "px-5 py-2.5 text-base",
 };
 
 function Button({
@@ -39,7 +39,7 @@ function Button({
     <button
       type={type}
       disabled={isDisabled}
-      className={`inline-flex items-center justify-center gap-2 rounded-2xl font-semibold tracking-tight transition-all duration-300 hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-[#2FA6A3]/18 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 ${sizes[size] || sizes.md} ${variants[variant] || variants.primary} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl font-semibold tracking-tight transition-all duration-300 hover:-translate-y-0.5 focus:outline-none focus:ring-4 focus:ring-[#2FA6A3]/18 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 ${sizes[size] || sizes.md} ${variants[variant] || variants.primary} ${className}`}
       {...props}
     >
       {iconNode && iconPosition === "left" && (

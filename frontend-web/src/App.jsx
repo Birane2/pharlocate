@@ -13,6 +13,7 @@ import HorairesList from "./pages/pharmacien/HorairesList";
 import PharmacienStocks from "./pages/pharmacien/PharmacienStocks";
 import ReservationsList from "./pages/pharmacien/ReservationsList";
 import StockCreate from "./pages/pharmacien/StockCreate";
+import PharmacienAvis from "./pages/pharmacien/PharmacienAvis";
 import Home from "./pages/public/Home";
 import PharmacyList from "./pages/public/PharmacyList";
 import PharmacyDetail from "./pages/public/PharmacyDetail";
@@ -185,6 +186,17 @@ function App() {
           <ProtectedRoute allowedRoles={["pharmacien"]}>
             <PharmacistPharmacyGate>
               <ReservationsList />
+            </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/pharmacien/avis"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <PharmacienAvis />
             </PharmacistPharmacyGate>
           </ProtectedRoute>
         }

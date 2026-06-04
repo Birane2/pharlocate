@@ -1,21 +1,21 @@
 function StatusBadge({ type = "open", value = false }) {
   const config = {
     open: value
-      ? "bg-pharmaGreenLight/20 text-pharmaTurquoise"
-      : "bg-pharmaDanger/10 text-pharmaDanger",
+      ? "bg-[#5EC6B8]/20 text-[#167769]"
+      : "bg-red-50 text-red-600",
     garde: value
-      ? "bg-orange-100 text-orange-700"
-      : "bg-pharmaSurface text-pharmaTextLight",
+      ? "bg-orange-50 text-orange-700"
+      : "bg-[#F1F5F9] text-[#6B7280]",
   };
 
   const label = {
-    open: value ? "Ouvert" : "Fermé",
+    open: value ? "Ouvert" : "Ferme",
     garde: value ? "Oui" : "Non",
   };
 
   return (
     <span
-      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${config[type]}`}
+      className={`inline-flex min-w-16 items-center justify-center rounded-full px-3 py-1 text-xs font-bold ${config[type]}`}
     >
       {label[type]}
     </span>

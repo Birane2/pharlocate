@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/pharmacien/pharmacie/', include('pharmacies.pharmacien_urls')),
     path('api/horaires/', include('pharmacies.horaire_urls')),
     path('api/avis/', include('reviews.urls')),
+    path('api/pharmacien/avis/', include('reviews.pharmacien_urls')),
     path('api/medicaments/', include('medicaments.urls')),
     path('api/stocks/', include('medicaments.stock_urls')),
     path('api/pharmacien/stocks/', include('medicaments.pharmacien_urls')),

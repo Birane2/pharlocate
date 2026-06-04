@@ -21,7 +21,11 @@ function getAreaLabel(address) {
 
 function PharmacyCard({ pharmacy, onViewDetails }) {
   const areaLabel = getAreaLabel(pharmacy.adresse);
-  const hasCoordinates = Boolean(pharmacy.latitude && pharmacy.longitude);
+  const hasCoordinates =
+    pharmacy.latitude !== null &&
+    pharmacy.latitude !== undefined &&
+    pharmacy.longitude !== null &&
+    pharmacy.longitude !== undefined;
 
   return (
     <Card className="h-full border-[#2F6E9E]/10 bg-white/95">

@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { faArrowLeft, faCapsules } from "@fortawesome/free-solid-svg-icons";
+import { faArrowLeft } from "@fortawesome/free-solid-svg-icons";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import PharmacyRequiredCard from "../../components/pharmacie/PharmacyRequiredCard";
 import StockForm from "../../components/stocks/StockForm";
-import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import { pharmacistLinks } from "../../routes/dashboardLinks";
@@ -224,24 +223,28 @@ function StockCreate() {
   };
 
   return (
-    <DashboardLayout title="Ajouter au stock" links={pharmacistLinks}>
-      <div className="space-y-6">
-        <section className="rounded-[1.5rem] bg-gradient-to-br from-[#2F6E9E] via-[#4A8BBE] to-[#2FA6A3] p-5 text-white shadow-[0_22px_60px_rgba(47,110,158,0.22)] sm:p-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+    <DashboardLayout
+      title="Ajouter au stock"
+      links={pharmacistLinks}
+      headerSubtitle="Ajoutez un medicament existant ou creez une nouvelle fiche."
+    >
+      <div className="mx-auto max-w-5xl space-y-3">
+        <section className="rounded-2xl border border-[#E2E8F2] bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <Badge variant="info" className="bg-white/15 text-white ring-white/20">
-                Stock pharmacie
-              </Badge>
-              <h1 className="mt-4 text-2xl font-semibold tracking-normal md:text-3xl">
-                Ajouter un medicament au stock
+              <h1 className="text-lg font-bold tracking-tight text-[#1C2B4A]">
+                Ajouter au stock
               </h1>
-             
+              <p className="mt-1 text-sm text-[#6B7280]">
+                Ajoutez un medicament existant ou creez une nouvelle fiche.
+              </p>
             </div>
 
             <Button
               variant="outline"
               icon={faArrowLeft}
-              className="border-white bg-white/10 text-white hover:bg-white hover:text-[#2F6E9E]"
+              size="sm"
+              className="w-full md:w-auto"
               onClick={() => navigate("/pharmacien/stocks")}
             >
               Retour aux stocks
@@ -256,10 +259,9 @@ function StockCreate() {
           />
         ) : (
           <Card
-            title="Informations du stock"
-            subtitle="Les donnees seront automatiquement rattachees a votre pharmacie."
             hover={false}
-            action={<Badge variant="blue" icon={faCapsules} showIcon>Catalogue medicaments</Badge>}
+            className="border-[#2F6E9E]/10"
+            bodyClassName="p-4"
           >
             {loading ? (
               <div className="flex h-40 items-center justify-center text-sm font-semibold text-[#2F6E9E]">

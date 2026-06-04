@@ -1,11 +1,8 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faBoxesStacked,
   faCapsules,
   faCircleInfo,
-  faFlask,
   faLayerGroup,
-  faMoneyBillWave,
   faPenToSquare,
   faRotateLeft,
 } from "@fortawesome/free-solid-svg-icons";
@@ -51,26 +48,14 @@ function StockForm({
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
+    <form onSubmit={onSubmit} className="space-y-4">
       {isEditing && (
-        <div className="rounded-[1.45rem] border border-[#2F6E9E]/20 bg-[#2F6E9E]/6 px-4 py-4 shadow-[0_14px_30px_rgba(47,110,158,0.08)]">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-sm font-black tracking-tight text-[#2F6E9E]">
-                <FontAwesomeIcon icon={faPenToSquare} />
-                Mode modification actif
-              </div>
-              <p className="mt-2 text-sm leading-6 text-pharmaTextLight">
-                Vous modifiez actuellement{" "}
-                <span className="font-black text-[#16324A]">
-                  {selectedStock?.medicament_data?.nom ||
-                    selectedStock?.medicament_nom ||
-                    "ce stock"}
-                </span>
-                . Seules la quantite, le prix et le seuil d'alerte sont modifiables.
-              </p>
+        <div className="rounded-2xl border border-[#2F6E9E]/15 bg-[#2F6E9E]/5 px-4 py-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-sm font-bold text-[#2F6E9E]">
+              <FontAwesomeIcon icon={faPenToSquare} />
+              Modification du stock
             </div>
-
             <div className="flex flex-wrap items-center gap-2">
               {selectedStock && <StockStatusBadge stock={selectedStock} />}
               <Badge variant="blue">Stock #{selectedStock?.id_stock || selectedStock?.id}</Badge>
@@ -80,68 +65,39 @@ function StockForm({
       )}
 
       {supportsModeTabs && (
-        <div className="rounded-[1.6rem] border border-[#2F6E9E]/10 bg-[linear-gradient(180deg,_rgba(247,251,253,0.96),_rgba(255,255,255,0.98))] p-4 shadow-[0_14px_34px_rgba(47,110,158,0.07)]">
-          <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="inline-flex rounded-2xl bg-[#F8FAFC] p-1">
+          {[
+            { value: "existing", label: "Medicament existant", icon: faLayerGroup },
+            { value: "new", label: "Nouveau medicament", icon: faCapsules },
+          ].map((tab) => (
             <button
+              key={tab.value}
               type="button"
-              onClick={() => onModeChange("existing")}
-              className={`flex-1 rounded-2xl border px-4 py-3 text-left transition ${
-                selectedMode === "existing"
-                  ? "border-[#2F6E9E] bg-[#2F6E9E] text-white shadow-[0_16px_32px_rgba(47,110,158,0.18)]"
-                  : "border-[#2F6E9E]/10 bg-white text-[#16324A] hover:border-[#2FA6A3]/35 hover:bg-[#F7FBFD]"
+              onClick={() => onModeChange(tab.value)}
+              className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition ${
+                selectedMode === tab.value
+                  ? "bg-[#2F6E9E] text-white shadow-sm"
+                  : "text-[#2F6E9E] hover:bg-[#2F6E9E]/8"
               }`}
             >
-              <div className="flex items-center gap-2">
-                <FontAwesomeIcon icon={faLayerGroup} />
-                <span className="text-sm font-black tracking-tight">
-                  Medicament existant
-                </span>
-              </div>
-              <p
-                className={`mt-2 text-xs leading-6 ${
-                  selectedMode === "existing" ? "text-white/80" : "text-[#6B7280]"
-                }`}
-              >
-                Choisissez un produit deja present dans le catalogue.
-              </p>
+              <FontAwesomeIcon icon={tab.icon} className="h-3.5 w-3.5" />
+              {tab.label}
             </button>
-
-            <button
-              type="button"
-              onClick={() => onModeChange("new")}
-              className={`flex-1 rounded-2xl border px-4 py-3 text-left transition ${
-                selectedMode === "new"
-                  ? "border-[#2FA6A3] bg-[#2FA6A3] text-white shadow-[0_16px_32px_rgba(47,166,163,0.18)]"
-                  : "border-[#2F6E9E]/10 bg-white text-[#16324A] hover:border-[#2FA6A3]/35 hover:bg-[#F7FBFD]"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <FontAwesomeIcon icon={faCapsules} />
-                <span className="text-sm font-black tracking-tight">
-                  Nouveau medicament
-                </span>
-              </div>
-              <p
-                className={`mt-2 text-xs leading-6 ${
-                  selectedMode === "new" ? "text-white/80" : "text-[#6B7280]"
-                }`}
-              >
-                Creez une nouvelle fiche avec description et photo.
-              </p>
-            </button>
-          </div>
+          ))}
         </div>
       )}
 
-      <div className="space-y-5">
+      <div className="grid gap-3 md:grid-cols-2">
         {selectedMode === "existing" ? (
           supportsModeTabs ? (
-            <MedicamentSelect
-              medicaments={medicaments}
-              value={selectedMedicamentValue}
-              disabled={disableExistingSelection}
-              onChange={handleMedicamentSelect}
-            />
+            <div className="md:col-span-2">
+              <MedicamentSelect
+                medicaments={medicaments}
+                value={selectedMedicamentValue}
+                disabled={disableExistingSelection}
+                onChange={handleMedicamentSelect}
+              />
+            </div>
           ) : (
             <Input
               label="Medicament"
@@ -160,11 +116,6 @@ function StockForm({
                 value: medicament.id,
                 label: medicament.nom,
               }))}
-              helperText={
-                isEditing
-                  ? "Le medicament associe a ce stock reste verrouille pendant la modification."
-                  : "Le stock sera automatiquement rattache a votre pharmacie."
-              }
               onChange={onChange}
               required
             />
@@ -173,51 +124,45 @@ function StockForm({
           <MedicamentCreateFields form={form} onChange={onChange} />
         )}
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Input
-            label="Quantite"
-            name="quantite"
-            type="number"
-            min="0"
-            step="1"
-            placeholder="Ex : 25"
-            value={form.quantite}
-            onChange={onChange}
-            required
-          />
+        <Input
+          label="Quantite"
+          name="quantite"
+          type="number"
+          min="0"
+          step="1"
+          placeholder="Ex : 25"
+          value={form.quantite}
+          onChange={onChange}
+          required
+        />
 
-          <Input
-            label="Prix"
-            name="prix"
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="Ex : 12.50"
-            value={form.prix}
-            onChange={onChange}
-            required
-          />
+        <Input
+          label="Prix (MRU)"
+          name="prix"
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Ex : 200.00 MRU"
+          value={form.prix}
+          onChange={onChange}
+          required
+        />
 
-          <div className="md:col-span-2">
-            <Input
-              label="Seuil d'alerte"
-              name="seuil_alerte"
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Ex : 10"
-              value={form.seuil_alerte}
-              onChange={onChange}
-              helperText="Par defaut, un stock devient faible si la quantite passe sous ce seuil."
-              required
-            />
-          </div>
-        </div>
+        <Input
+          label="Seuil d'alerte"
+          name="seuil_alerte"
+          type="number"
+          min="0"
+          step="1"
+          placeholder="Ex : 10"
+          value={form.seuil_alerte}
+          onChange={onChange}
+          required
+        />
       </div>
 
-
       {error && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
           <div className="flex items-start gap-2">
             <FontAwesomeIcon icon={faCircleInfo} className="mt-0.5" />
             <span>{error}</span>
@@ -226,40 +171,33 @@ function StockForm({
       )}
 
       {!loadingMedicaments && !hasMedicaments && selectedMode === "existing" && !isEditing && (
-        <div className="rounded-2xl border border-[#2FA6A3]/20 bg-[#2FA6A3]/10 px-4 py-3 text-sm font-medium text-[#2F6E9E]">
-          Aucun medicament n'existe encore. Utilisez la page d'ajout pour creer un
-          medicament avant de l'integrer a votre stock.
+        <div className="rounded-xl border border-[#2FA6A3]/20 bg-[#2FA6A3]/10 px-4 py-3 text-sm font-medium text-[#2F6E9E]">
+          Aucun medicament disponible.
         </div>
       )}
 
-      <div className="flex flex-col gap-3 border-t border-[#2F6E9E]/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
-        <Badge variant="blue" showIcon>
-          Pharmacien connecte : stock lie a votre pharmacie
-        </Badge>
-
-        <div className="flex flex-col gap-3 sm:flex-row">
-          {isEditing && (
-            <Button
-              type="button"
-              variant="ghost"
-              icon={faRotateLeft}
-              onClick={onCancel}
-            >
-              Annuler
-            </Button>
-          )}
+      <div className="flex flex-col gap-2 border-t border-[#E2E8F2] pt-4 sm:flex-row sm:justify-end">
+        {isEditing && (
           <Button
-            type="submit"
-            loading={submitting}
-            disabled={selectedMode === "existing" && !isEditing && !hasMedicaments}
+            type="button"
+            variant="ghost"
+            icon={faRotateLeft}
+            onClick={onCancel}
+            className="w-full sm:w-auto"
           >
-            {isEditing
-              ? "Mettre a jour le stock"
-              : selectedMode === "new"
-                ? "Creer et ajouter au stock"
-                : "Ajouter au stock"}
+            Annuler
           </Button>
-        </div>
+        )}
+        <Button
+          type="submit"
+          loading={submitting}
+          className="w-full sm:w-auto"
+          disabled={selectedMode === "existing" && !isEditing && !hasMedicaments}
+        >
+          {isEditing
+            ? "Mettre a jour"
+            : "Ajouter au stock"}
+        </Button>
       </div>
     </form>
   );

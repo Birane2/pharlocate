@@ -9,3 +9,8 @@ export const createAvis = async (payload) => {
   const res = await API.post("/api/avis/", payload);
   return res.data;
 };
+
+export const getPharmacienAvis = async () => {
+  const res = await API.get("/api/pharmacien/avis/");
+  return res.data;
+};

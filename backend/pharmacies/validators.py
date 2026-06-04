@@ -49,6 +49,8 @@ class CoordinateDecimalField(serializers.DecimalField):
         kwargs.setdefault('max_digits', GPS_COORDINATE_MAX_DIGITS)
         kwargs.setdefault('decimal_places', GPS_COORDINATE_DECIMAL_PLACES)
         kwargs.setdefault('coerce_to_string', False)
+        kwargs.setdefault('required', False)
+        kwargs.setdefault('allow_null', True)
 
         error_messages = kwargs.pop('error_messages', {})
         error_messages.setdefault('invalid', f'{coordinate_label} invalide.')
@@ -57,7 +59,7 @@ class CoordinateDecimalField(serializers.DecimalField):
 
     def to_internal_value(self, data):
         if data in (None, ''):
-            return super().to_internal_value(data)
+            return None
 
         try:
             value = Decimal(str(data).strip())

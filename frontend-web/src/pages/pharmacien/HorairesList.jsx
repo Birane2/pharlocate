@@ -38,11 +38,11 @@ function toDatetimeLocal(value) {
 
 function formatApiError(error) {
   if (error.response?.status === 401) {
-    return "Votre session a expiré. Veuillez vous reconnecter.";
+    return "Votre session a expire. Veuillez vous reconnecter.";
   }
 
   if (error.response?.status === 500) {
-    return "Une erreur serveur est survenue. Réessayez plus tard.";
+    return "Une erreur serveur est survenue. Reessayez plus tard.";
   }
 
   const data = error.response?.data;
@@ -67,7 +67,7 @@ function formatApiError(error) {
     }
   }
 
-  return "Une erreur est survenue. Vérifiez les informations saisies.";
+  return "Une erreur est survenue. Verifiez les informations saisies.";
 }
 
 function HorairesList() {
@@ -95,6 +95,8 @@ function HorairesList() {
   const isCreateMode = location.pathname.endsWith("/nouveau");
   const isEditMode = Boolean(horaireId);
   const isFormOpen = isCreateMode || isEditMode;
+  const openedDays = horaires.filter((horaire) => horaire.est_ouvert).length;
+  const guardDays = horaires.filter((horaire) => horaire.est_garde).length;
 
   const loadHoraires = async (page = 1) => {
     setLoadingList(true);
@@ -218,10 +220,10 @@ function HorairesList() {
 
       if (isEditMode) {
         await updateHoraire(horaireId, payload);
-        setSuccessMessage("Horaire modifié avec succès.");
+        setSuccessMessage("Horaire modifie avec succes.");
       } else {
         await createHoraire(payload);
-        setSuccessMessage("Horaire ajouté avec succès.");
+        setSuccessMessage("Horaire ajoute avec succes.");
       }
 
       closeForm();
@@ -257,7 +259,7 @@ function HorairesList() {
           : pagination.currentPage;
 
       setDeleteTarget(null);
-      setSuccessMessage("Horaire supprimé avec succès.");
+      setSuccessMessage("Horaire supprime avec succes.");
       await loadHoraires(nextPage);
     } catch (err) {
       setError(formatApiError(err));
@@ -267,40 +269,60 @@ function HorairesList() {
   };
 
   return (
-    <DashboardLayout title="Liste des horaires" links={pharmacistLinks}>
-      <div className="space-y-6">
-        <Card className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+    <DashboardLayout
+      title="Horaires"
+      links={pharmacistLinks}
+      headerSubtitle="Gerez les horaires d'ouverture et les periodes de garde de votre pharmacie."
+    >
+      <div className="mx-auto max-w-6xl space-y-3">
+        <Card
+          hover={false}
+          className="p-0"
+          bodyClassName="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between"
+        >
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-pharmaTurquoise">
-              Horaires
-            </p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-pharmaBlue">
+            <h1 className="text-lg font-bold tracking-tight text-[#1C2B4A]">
               Gestion des horaires
             </h1>
-            <p className="mt-2 text-sm font-normal leading-6 text-pharmaTextLight">
-              Visualisez, ajoutez, modifiez et supprimez les horaires de votre
-              pharmacie.
+            <p className="mt-1 text-sm text-[#6B7280]">
+              Configurez les horaires et gardes.
             </p>
           </div>
 
-          <Button onClick={openCreateForm}>
-            Ajouter un horaire
+          <Button onClick={openCreateForm} className="w-full md:w-auto">
+            + Ajouter un horaire
           </Button>
         </Card>
 
+        <section className="grid gap-2 sm:grid-cols-3">
+          {[
+            { label: "Horaires", value: pagination.count },
+            { label: "Jours ouverts", value: openedDays },
+            { label: "Jour de garde", value: guardDays },
+          ].map((item) => (
+            <article
+              key={item.label}
+              className="rounded-2xl border border-[#E2E8F2] bg-white px-4 py-3 shadow-sm"
+            >
+              <p className="text-2xl font-black text-[#1C2B4A]">{item.value}</p>
+              <p className="mt-0.5 text-xs font-bold text-[#6B7280]">{item.label}</p>
+            </article>
+          ))}
+        </section>
+
         {error && (
-          <div className="rounded-2xl border border-pharmaDanger/30 bg-pharmaDanger/10 px-4 py-3 text-sm text-pharmaDanger">
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
             {error}
           </div>
         )}
 
         {successMessage && (
-          <div className="rounded-2xl border border-pharmaTurquoise/30 bg-pharmaTurquoise/10 px-4 py-3 text-sm text-pharmaTurquoise">
+          <div className="rounded-xl border border-[#2FA6A3]/30 bg-[#2FA6A3]/10 px-4 py-3 text-sm font-semibold text-[#2FA6A3]">
             {successMessage}
           </div>
         )}
 
-        <Card className="overflow-hidden p-0">
+        <Card hover={false} className="overflow-hidden p-0">
           <HoraireTable
             horaires={horaires}
             loading={loadingList}
@@ -313,7 +335,6 @@ function HorairesList() {
           <Pagination
             currentPage={pagination.currentPage}
             totalPages={totalPages}
-            pageSize={pagination.pageSize}
             loading={loadingList}
             hasPrevious={Boolean(pagination.previous)}
             hasNext={Boolean(pagination.next)}

@@ -1,8 +1,11 @@
 from rest_framework import generics, status
+from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import Avg, Count
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from config.permissions import IsAuthenticatedWithTokenMessage
+from config.permissions import IsAuthenticatedWithTokenMessage, IsPharmacien
 from .models import Avis
 from .serializers import AvisSerializer
 
@@ -46,3 +49,37 @@ class AvisListCreateView(generics.ListCreateAPIView):
             },
             status=status.HTTP_201_CREATED
         )
+
+
+class PharmacienAvisListView(APIView):
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsPharmacien]
+
+    def get(self, request):
+        queryset = (
+            Avis.objects.select_related('user', 'pharmacie')
+            .filter(pharmacie__user=request.user)
+            .order_by('-date')
+        )
+        try:
+            pharmacy = request.user.pharmacy
+        except ObjectDoesNotExist:
+            pharmacy = None
+        distribution_rows = queryset.values('note').annotate(total=Count('id'))
+        distribution = {str(note): 0 for note in range(1, 6)}
+
+        for row in distribution_rows:
+            distribution[str(row['note'])] = row['total']
+
+        serializer = AvisSerializer(queryset, many=True)
+        return Response({
+            'pharmacie': {
+                'id': pharmacy.id,
+                'nom': pharmacy.nom,
+            } if pharmacy else None,
+            'stats': {
+                'note_moyenne': round(queryset.aggregate(avg=Avg('note'))['avg'] or 0, 1),
+                'total': queryset.count(),
+                'repartition': distribution,
+            },
+            'results': serializer.data,
+        })

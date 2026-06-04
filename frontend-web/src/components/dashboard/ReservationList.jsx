@@ -90,7 +90,7 @@ function ReservationList({ reservations, page, totalPages, onPrevious, onNext })
                   {formatDate(reservation.date_reservation)}
                 </p>
                 <p className="mt-1 text-xs text-pharmaTextLight">
-                  Total : {reservation.total || 0} DH
+                  Total : {reservation.total || 0} MRU
                 </p>
               </div>
             </div>

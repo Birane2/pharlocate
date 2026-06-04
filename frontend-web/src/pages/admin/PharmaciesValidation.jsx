@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faBuildingCircleCheck,
+  faChevronLeft,
+  faChevronRight,
+  faCircleCheck,
+  faCircleXmark,
   faClock,
-  faRotateRight,
 } from "@fortawesome/free-solid-svg-icons";
 import PharmacyDetailModal from "../../components/admin/PharmacyDetailModal";
 import PharmacyValidationTable from "../../components/admin/PharmacyValidationTable";
 import RejectReasonModal from "../../components/admin/RejectReasonModal";
 import ConfirmModal from "../../components/common/ConfirmModal";
-import Badge from "../../components/ui/Badge";
-import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import AdminLayout from "../../layouts/AdminLayout";
 import {
@@ -19,7 +19,7 @@ import {
   validateAdminPharmacy,
 } from "../../services/adminPharmacyService";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 
 const emptyPagination = {
   count: 0,
@@ -30,11 +30,11 @@ const emptyPagination = {
 
 function getApiErrorMessage(error) {
   if (error.response?.status === 401) {
-    return "Votre session a expiré. Veuillez vous reconnecter.";
+    return "Votre session a expire. Veuillez vous reconnecter.";
   }
 
   if (error.response?.status === 403) {
-    return "Accès refusé. Cette page est réservée aux administrateurs.";
+    return "Acces refuse. Cette page est reservee aux administrateurs.";
   }
 
   if (error.response?.status === 404) {
@@ -46,36 +46,6 @@ function getApiErrorMessage(error) {
   }
 
   return error.response?.data?.error || "Impossible de traiter la demande.";
-}
-
-function PaginationControls({ page, totalPages, previous, next, loading, onPageChange }) {
-  return (
-    <div className="flex flex-col gap-3 rounded-[1.5rem] border border-[#2F6E9E]/10 bg-white/90 px-4 py-3 shadow-[0_16px_36px_rgba(47,110,158,0.08)] sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm font-medium text-pharmaTextLight">
-        Page <span className="font-bold text-pharmaText">{page}</span> sur{" "}
-        <span className="font-bold text-pharmaText">{totalPages}</span>
-      </p>
-
-      <div className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!previous || loading}
-          onClick={() => onPageChange(page - 1)}
-        >
-          Précédent
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!next || loading}
-          onClick={() => onPageChange(page + 1)}
-        >
-          Suivant
-        </Button>
-      </div>
-    </div>
-  );
 }
 
 function PharmaciesValidation() {
@@ -90,10 +60,13 @@ function PharmaciesValidation() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
+  const [todayStats, setTodayStats] = useState({ validated: 0, rejected: 0 });
 
   const totalPages = Math.max(1, Math.ceil(pagination.count / PAGE_SIZE));
+  const firstItem = pagination.count === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastItem = Math.min(page * PAGE_SIZE, pagination.count);
 
-  const loadPharmacies = useCallback(async (targetPage) => {
+  const loadPharmacies = useCallback(async (targetPage = 1) => {
     setLoading(true);
     setError("");
 
@@ -155,9 +128,14 @@ function PharmaciesValidation() {
 
     try {
       const response = await validateAdminPharmacy(selectedPharmacy.id);
-      setSuccess(response.message || "Pharmacie validée avec succès.");
+      setSuccess(response.message || "Pharmacie validee avec succes.");
       setConfirmOpen(false);
+      setDetailOpen(false);
       setSelectedPharmacy(null);
+      setTodayStats((current) => ({
+        ...current,
+        validated: current.validated + 1,
+      }));
       await refreshCurrentPage();
     } catch (err) {
       setError(getApiErrorMessage(err));
@@ -177,9 +155,14 @@ function PharmaciesValidation() {
 
     try {
       const response = await rejectAdminPharmacy(selectedPharmacy.id, reason);
-      setSuccess(response.message || "Pharmacie refusée avec succès.");
+      setSuccess(response.message || "Pharmacie refusee avec succes.");
       setRejectOpen(false);
+      setDetailOpen(false);
       setSelectedPharmacy(null);
+      setTodayStats((current) => ({
+        ...current,
+        rejected: current.rejected + 1,
+      }));
       await refreshCurrentPage();
     } catch (err) {
       setError(getApiErrorMessage(err));
@@ -189,64 +172,50 @@ function PharmaciesValidation() {
   };
 
   return (
-    <AdminLayout title="Validation des pharmacies">
-      <div className="space-y-6">
-        <section className="rounded-[1.5rem] bg-gradient-to-br from-[#2F6E9E] via-[#0085AA] to-[#35C3A3] p-4 text-white shadow-[0_18px_46px_rgba(47,110,158,0.2)] sm:p-5">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <Badge variant="info" className="bg-white/15 text-white ring-white/20">
-                Administration
-              </Badge>
-              <h1 className="mt-3 text-xl font-semibold tracking-tight md:text-2xl">
-                Validation des pharmacies
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm font-normal leading-6 text-white/85">
-                Vérifiez les pharmacies créées par les pharmaciens avant leur
-                publication dans la liste publique.
-              </p>
-            </div>
-
-            <Button
-              variant="outline"
-              className="border-white bg-white/10 text-white hover:bg-white hover:text-[#2F6E9E]"
-              icon={faRotateRight}
-              onClick={() => loadPharmacies(page)}
-              loading={loading}
+    <AdminLayout
+      title="Validation des pharmacies"
+      subtitle="Verifiez et traitez les demandes de creation des pharmacies."
+    >
+      <div className="space-y-3">
+        <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {[
+            {
+              label: "En attente",
+              value: pagination.count,
+              icon: faClock,
+              className: "bg-[#F59E0B]/12 text-[#B45309]",
+            },
+            {
+              label: "Validees aujourd'hui",
+              value: todayStats.validated,
+              icon: faCircleCheck,
+              className: "bg-[#10B981]/10 text-[#047857]",
+            },
+            {
+              label: "Refusees aujourd'hui",
+              value: todayStats.rejected,
+              icon: faCircleXmark,
+              className: "bg-[#EF4444]/10 text-[#DC2626]",
+            },
+          ].map((item) => (
+            <article
+              key={item.label}
+              className="rounded-2xl border border-[#E2E8F2] bg-white px-4 py-3 shadow-sm"
             >
-              Actualiser
-            </Button>
-          </div>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-2xl font-black text-[#1C2B4A]">{item.value}</p>
+                  <p className="mt-0.5 text-xs font-bold text-[#6B7280]">
+                    {item.label}
+                  </p>
+                </div>
+                <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${item.className}`}>
+                  <FontAwesomeIcon icon={item.icon} className="h-4 w-4" />
+                </span>
+              </div>
+            </article>
+          ))}
         </section>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Card hover={false}>
-            <div className="flex items-center gap-4">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-100 text-orange-700">
-                <FontAwesomeIcon icon={faClock} />
-              </span>
-              <div>
-                <p className="text-sm font-medium text-pharmaTextLight">En attente</p>
-                <p className="mt-1 text-2xl font-semibold text-pharmaText">
-                  {pagination.count}
-                </p>
-              </div>
-            </div>
-          </Card>
-
-          <Card hover={false}>
-            <div className="flex items-center gap-4">
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#35C3A3]/15 text-[#13795f]">
-                <FontAwesomeIcon icon={faBuildingCircleCheck} />
-              </span>
-              <div>
-                <p className="text-sm font-medium text-pharmaTextLight">Impact</p>
-                <p className="mt-1 text-sm font-normal leading-6 text-pharmaText">
-                  Une pharmacie validée devient visible publiquement.
-                </p>
-              </div>
-            </div>
-          </Card>
-        </div>
 
         {error && (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
@@ -262,7 +231,7 @@ function PharmaciesValidation() {
 
         {loading ? (
           <Card hover={false}>
-            <div className="flex h-48 items-center justify-center text-sm font-semibold text-pharmaBlue">
+            <div className="flex h-40 items-center justify-center text-sm font-semibold text-pharmaBlue">
               Chargement des pharmacies...
             </div>
           </Card>
@@ -270,14 +239,14 @@ function PharmaciesValidation() {
           <Card hover={false}>
             <div className="py-8 text-center">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#35C3A3]/15 text-[#13795f]">
-                <FontAwesomeIcon icon={faBuildingCircleCheck} />
+                <FontAwesomeIcon icon={faCircleCheck} />
               </div>
               <h2 className="mt-4 text-xl font-semibold text-pharmaText">
                 Aucune pharmacie en attente de validation
               </h2>
               <p className="mx-auto mt-2 max-w-md text-sm font-normal leading-6 text-pharmaTextLight">
-                Toutes les demandes ont été traitées. Les nouvelles pharmacies
-                apparaîtront automatiquement ici.
+                Toutes les demandes ont ete traitees. Les nouvelles pharmacies
+                apparaitront automatiquement ici.
               </p>
             </div>
           </Card>
@@ -285,19 +254,42 @@ function PharmaciesValidation() {
           <>
             <PharmacyValidationTable
               pharmacies={pharmacies}
+              actionLoading={actionLoading}
               onView={openDetail}
               onValidate={openValidate}
               onReject={openReject}
             />
 
-            <PaginationControls
-              page={page}
-              totalPages={totalPages}
-              previous={pagination.previous}
-              next={pagination.next}
-              loading={loading}
-              onPageChange={loadPharmacies}
-            />
+            <div className="flex flex-col gap-2 rounded-2xl border border-[#E2E8F2] bg-white px-3 py-2 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs font-semibold text-[#6B7280]">
+                Affichage de {firstItem} a {lastItem} sur {pagination.count} demandes
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <p className="text-xs font-semibold text-[#6B7280]">
+                  Page {page} sur {totalPages}
+                </p>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    disabled={!pagination.previous || loading}
+                    onClick={() => loadPharmacies(page - 1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#2F6E9E]/15 bg-white text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#2F6E9E]"
+                    aria-label="Page precedente"
+                  >
+                    <FontAwesomeIcon icon={faChevronLeft} className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!pagination.next || loading}
+                    onClick={() => loadPharmacies(page + 1)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#2F6E9E]/15 bg-white text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#2F6E9E]"
+                    aria-label="Page suivante"
+                  >
+                    <FontAwesomeIcon icon={faChevronRight} className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
           </>
         )}
       </div>
@@ -305,7 +297,10 @@ function PharmaciesValidation() {
       <PharmacyDetailModal
         open={detailOpen}
         pharmacy={selectedPharmacy}
+        loading={actionLoading}
         onClose={() => setDetailOpen(false)}
+        onValidate={openValidate}
+        onReject={openReject}
       />
 
       <ConfirmModal

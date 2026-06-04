@@ -1,15 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faCapsules,
-  faTriangleExclamation,
 } from "@fortawesome/free-solid-svg-icons";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import StockDisponibles from "../../components/stocks/StockDisponibles";
-import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
-import Card from "../../components/ui/Card";
 import { pharmacistLinks } from "../../routes/dashboardLinks";
 import { deleteStock, getStocks } from "../../services/stockService";
 
@@ -157,7 +153,10 @@ function PharmacienStocks() {
   };
 
   useEffect(() => {
+    // Existing fetch-on-filter-change pattern; keep behavior unchanged.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadStocks({ page: 1, searchValue: search, statusValue: statusFilter });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, statusFilter]);
 
   const handleEditStock = (stock) => {
@@ -209,8 +208,12 @@ function PharmacienStocks() {
   };
 
   return (
-    <DashboardLayout title="Gestion des stocks" links={pharmacistLinks}>
-      <div className="space-y-6">
+    <DashboardLayout
+      title="Gestion des stocks"
+      links={pharmacistLinks}
+      headerSubtitle="Gerez l'inventaire de votre pharmacie."
+    >
+      <div className="mx-auto max-w-7xl space-y-3">
         {toast && (
           <div className="pointer-events-none fixed right-4 top-4 z-40">
             <div
@@ -227,30 +230,25 @@ function PharmacienStocks() {
           </div>
         )}
 
-        <section className="rounded-[1.75rem] bg-gradient-to-br from-[#2F6E9E] via-[#4A8BBE] to-[#2FA6A3] p-5 text-white shadow-[0_22px_60px_rgba(47,110,158,0.22)] sm:p-6">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+        <section className="rounded-2xl border border-[#E2E8F2] bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <Badge variant="info" className="bg-white/15 text-white ring-white/20">
-                Stock pharmacie
-              </Badge>
-              <h1 className="mt-4 text-2xl font-semibold tracking-tight md:text-3xl">
+              <h1 className="text-lg font-bold tracking-tight text-[#1C2B4A]">
                 Gestion des stocks
               </h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-white/85">
-                Consultez l'inventaire de votre pharmacie, retrouvez rapidement un
-                medicament, appliquez des filtres utiles et gardez une vue claire sur
-                les disponibilites et les ruptures.
+              <p className="mt-1 text-sm text-[#6B7280]">
+                Inventaire de votre pharmacie
               </p>
             </div>
 
             <Button
               type="button"
-              variant="secondary"
+              variant="primary"
               icon={faCapsules}
-              className="shadow-[0_18px_38px_rgba(47,166,163,0.22)]"
+              className="w-full md:w-auto"
               onClick={() => navigate("/pharmacien/stocks/ajouter")}
             >
-              Ajouter un medicament
+              + Ajouter un medicament
             </Button>
           </div>
         </section>
@@ -278,29 +276,6 @@ function PharmacienStocks() {
           deletingStockId={deletingStockId}
         />
 
-        <Card
-          hover={false}
-          className="border-[#2F6E9E]/10 bg-[linear-gradient(180deg,_rgba(247,251,253,0.95),_rgba(255,255,255,0.98))]"
-        >
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <p className="text-sm font-black tracking-tight text-[#16324A]">
-                Conseils de gestion
-              </p>
-              <p className="mt-2 max-w-3xl text-sm leading-7 text-pharmaTextLight">
-                Une surveillance reguliere des seuils d'alerte aide a limiter les ruptures,
-                a mieux preparer les commandes et a garantir la continuite du service patient.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm font-medium text-orange-700">
-              <div className="flex items-start gap-2">
-                <FontAwesomeIcon icon={faTriangleExclamation} className="mt-0.5" />
-                <span>Confirmez toujours la suppression d'un stock avant validation.</span>
-              </div>
-            </div>
-          </div>
-        </Card>
       </div>
     </DashboardLayout>
   );

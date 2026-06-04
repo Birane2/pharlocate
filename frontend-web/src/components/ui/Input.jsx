@@ -13,7 +13,7 @@ function Input({
   ...props
 }) {
   const hasError = Boolean(error);
-  const controlClass = `w-full rounded-2xl border bg-white px-4 py-3 text-[#1F2937] outline-none transition duration-200 placeholder:text-[#6B7280]/70 disabled:cursor-not-allowed disabled:bg-[#F5F7FA] disabled:text-[#6B7280] ${
+  const controlClass = `w-full rounded-2xl border bg-white px-3.5 py-2.5 text-sm text-[#1F2937] outline-none transition duration-200 placeholder:text-[#6B7280]/70 disabled:cursor-not-allowed disabled:bg-[#F5F7FA] disabled:text-[#6B7280] ${
     hasError
       ? "border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-100"
       : "border-[#2F6E9E]/15 focus:border-[#2FA6A3] focus:ring-4 focus:ring-[#35C3A3]/20"
@@ -22,7 +22,7 @@ function Input({
   return (
     <div className={`w-full ${className}`}>
       {label && (
-        <label className="mb-2 block text-sm font-black tracking-tight text-[#1F2937]">
+        <label className="mb-1.5 block text-xs font-black tracking-tight text-[#1F2937]">
           {label}
         </label>
       )}
@@ -48,7 +48,7 @@ function Input({
 
       {(error || helperText) && (
         <p
-          className={`mt-2 flex items-center gap-2 text-sm ${
+          className={`mt-1.5 flex items-center gap-2 text-xs ${
             hasError ? "font-semibold text-red-600" : "text-[#6B7280]"
           }`}
         >

@@ -124,7 +124,12 @@ function Home() {
   };
 
   const handleOpenMap = (pharmacy) => {
-    if (!pharmacy?.latitude || !pharmacy?.longitude) {
+    if (
+      pharmacy?.latitude === null ||
+      pharmacy?.latitude === undefined ||
+      pharmacy?.longitude === null ||
+      pharmacy?.longitude === undefined
+    ) {
       navigate("/map");
       return;
     }

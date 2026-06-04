@@ -1,4 +1,5 @@
-import Button from "../ui/Button";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faChevronLeft, faChevronRight } from "@fortawesome/free-solid-svg-icons";
 
 function StockPagination({
   currentPage,
@@ -12,51 +13,30 @@ function StockPagination({
     return null;
   }
 
-  const pageNumbers = Array.from({ length: totalPages }, (_, index) => index + 1);
-
   return (
-    <div className="flex flex-col gap-4 rounded-[1.5rem] border border-[#2F6E9E]/10 bg-white/90 px-4 py-4 shadow-[0_16px_36px_rgba(47,110,158,0.08)] sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm font-medium text-pharmaTextLight">
-        Page <span className="font-black text-pharmaText">{currentPage}</span> sur{" "}
-        <span className="font-black text-pharmaText">{totalPages}</span>
+    <div className="flex items-center justify-end gap-3 border-t border-[#E2E8F2] bg-[#F8FAFC] px-3 py-2">
+      <p className="text-xs font-semibold text-[#6B7280]">
+        Page {currentPage} sur {totalPages}
       </p>
-
-      <div className="flex flex-wrap gap-2">
-        <Button
+      <div className="flex gap-1.5">
+        <button
           type="button"
-          variant="outline"
-          size="sm"
           disabled={disabled || !hasPrevious}
           onClick={() => onPageChange(currentPage - 1)}
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#2F6E9E]/15 bg-white text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#2F6E9E]"
+          aria-label="Page precedente"
         >
-          Precedent
-        </Button>
-
-        {pageNumbers.map((pageNumber) => (
-          <button
-            key={pageNumber}
-            type="button"
-            disabled={disabled}
-            onClick={() => onPageChange(pageNumber)}
-            className={`min-w-10 rounded-xl px-3 py-2 text-sm font-black transition ${
-              pageNumber === currentPage
-                ? "bg-[#2F6E9E] text-white shadow-[0_12px_26px_rgba(47,110,158,0.22)]"
-                : "bg-[#2F6E9E]/8 text-[#2F6E9E] hover:bg-[#2F6E9E]/14"
-            } disabled:cursor-not-allowed disabled:opacity-60`}
-          >
-            {pageNumber}
-          </button>
-        ))}
-
-        <Button
+          <FontAwesomeIcon icon={faChevronLeft} className="h-3 w-3" />
+        </button>
+        <button
           type="button"
-          variant="outline"
-          size="sm"
           disabled={disabled || !hasNext}
           onClick={() => onPageChange(currentPage + 1)}
+          className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#2F6E9E]/15 bg-white text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#2F6E9E]"
+          aria-label="Page suivante"
         >
-          Suivant
-        </Button>
+          <FontAwesomeIcon icon={faChevronRight} className="h-3 w-3" />
+        </button>
       </div>
     </div>
   );

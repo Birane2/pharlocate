@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
-import Card from "../../components/ui/Card";
 import { pharmacistLinks } from "../../routes/dashboardLinks";
 import ErrorMessage from "../../components/common/ErrorMessage";
 import Loading from "../../components/common/Loading";
 import PharmacieProfileForm from "../../components/pharmacie/PharmacieProfileForm";
-import PharmacieStatusBadge from "../../components/pharmacie/PharmacieStatusBadge";
 import PharmacyRequiredCard from "../../components/pharmacie/PharmacyRequiredCard";
 import {
   createPharmacy,
@@ -13,6 +11,7 @@ import {
   updateMyPharmacyPhoto,
   updateMyPharmacyProfile,
 } from "../../services/pharmacyService";
+import { getBrowserPosition } from "../../services/googleMapsService";
 
 const initialForm = {
   nom: "",
@@ -80,6 +79,7 @@ function PharmacieProfile() {
   const [hasPharmacy, setHasPharmacy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [detectingPosition, setDetectingPosition] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -146,6 +146,27 @@ function PharmacieProfile() {
     }
   };
 
+  const handleUseCurrentPosition = async () => {
+    setDetectingPosition(true);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const position = await getBrowserPosition();
+
+      setForm((prev) => ({
+        ...prev,
+        latitude: position.lat.toFixed(6),
+        longitude: position.lng.toFixed(6),
+      }));
+      setSuccessMessage("Position actuelle detectee. Verifiez puis enregistrez le formulaire.");
+    } catch (err) {
+      setError(err.message || "Impossible de recuperer votre position actuelle.");
+    } finally {
+      setDetectingPosition(false);
+    }
+  };
+
   const handlePhotoChange = async (event) => {
     const photo = event.target.files?.[0];
 
@@ -170,25 +191,12 @@ function PharmacieProfile() {
   };
 
   return (
-    <DashboardLayout title="Profil pharmacie" links={pharmacistLinks}>
-      <div className="space-y-6">
-        <Card>
-          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-pharmaBlue">
-                Profil pharmacie
-              </h1>
-              <p className="mt-2 text-sm text-pharmaTextLight">
-                Mettez a jour les informations visibles pour les patients.
-              </p>
-            </div>
-
-            {pharmacy && (
-              <PharmacieStatusBadge isValid={pharmacy.est_valide} />
-            )}
-          </div>
-        </Card>
-
+    <DashboardLayout
+      title="Profil pharmacie"
+      links={pharmacistLinks}
+      headerSubtitle="Mettez a jour les informations visibles pour les patients."
+    >
+      <div className="mx-auto max-w-5xl space-y-4">
         {loading ? (
           <Loading label="Chargement du profil pharmacie..." />
         ) : (
@@ -196,7 +204,7 @@ function PharmacieProfile() {
             <ErrorMessage message={error} />
 
             {successMessage && (
-              <div className="rounded-xl border border-pharmaTurquoise/30 bg-pharmaTurquoise/10 px-4 py-3 text-sm text-pharmaTurquoise">
+              <div className="rounded-xl border border-[#2FA6A3]/30 bg-[#2FA6A3]/10 px-4 py-3 text-sm font-semibold text-[#2FA6A3]">
                 {successMessage}
               </div>
             )}
@@ -208,12 +216,12 @@ function PharmacieProfile() {
                   message="Ce pharmacien ne possede pas encore de pharmacie associee. Veuillez creer votre pharmacie pour acceder a toutes les fonctionnalites."
                 />
 
-                <Card>
-                  <div className="mb-5">
-                    <h2 className="text-xl font-bold text-pharmaBlue">
+                <section className="rounded-2xl border border-[#E2E8F2] bg-white p-4 shadow-sm">
+                  <div className="mb-4">
+                    <h2 className="text-lg font-bold text-[#2F6E9E]">
                       Creer ma pharmacie
                     </h2>
-                    <p className="mt-2 text-sm text-pharmaTextLight">
+                    <p className="mt-1 text-sm text-[#6B7280]">
                       Renseignez les informations principales. La pharmacie sera en attente de validation par un administrateur.
                     </p>
                   </div>
@@ -222,44 +230,33 @@ function PharmacieProfile() {
                     form={form}
                     submitting={submitting}
                     uploadingPhoto={false}
+                    detectingPosition={detectingPosition}
                     showPhoto={false}
-                    submitLabel="Creer ma pharmacie"
+                    submitLabel="Creer"
                     onChange={handleChange}
                     onPhotoChange={() => {}}
+                    onUseCurrentPosition={handleUseCurrentPosition}
                     onSubmit={handleSubmit}
                   />
-                </Card>
+                </section>
               </>
             )}
 
             {pharmacy && (
-              <Card>
-                <div className="mb-5 grid gap-3 text-sm text-pharmaTextLight md:grid-cols-2">
-                  <p>
-                    Statut admin :{" "}
-                    <span className="font-semibold text-pharmaText">
-                      {pharmacy.est_valide ? "Validee" : "En attente"}
-                    </span>
-                  </p>
-                  <p>
-                    Date creation :{" "}
-                    <span className="font-semibold text-pharmaText">
-                      {new Date(pharmacy.date_creation).toLocaleDateString()}
-                    </span>
-                  </p>
-                </div>
-
+              <section>
                 <PharmacieProfileForm
                   form={form}
                   photoPreview={pharmacy.photo}
                   submitting={submitting}
                   uploadingPhoto={uploadingPhoto}
+                  detectingPosition={detectingPosition}
                   submitLabel="Enregistrer les modifications"
                   onChange={handleChange}
                   onPhotoChange={handlePhotoChange}
+                  onUseCurrentPosition={handleUseCurrentPosition}
                   onSubmit={handleSubmit}
                 />
-              </Card>
+              </section>
             )}
           </>
         )}

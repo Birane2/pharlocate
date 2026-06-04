@@ -12,7 +12,6 @@ function MedicamentSelect({ medicaments, value, disabled = false, onChange }) {
         value: medicament.id,
         label: medicament.nom,
       }))}
-      helperText="Selectionnez un medicament deja disponible dans le catalogue."
       onChange={(event) => onChange(event.target.value)}
     />
   );

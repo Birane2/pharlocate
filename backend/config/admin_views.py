@@ -34,6 +34,7 @@ class AdminDashboardStatsView(APIView):
         pharmacies = Pharmacy.objects.select_related('user').all()
         users = User.objects.all()
         reservations = Reservation.objects.select_related('user', 'pharmacie').all()
+        stocks = Stock.objects.all()
 
         users_by_role = {
             item['role']: item['total']
@@ -54,6 +55,11 @@ class AdminDashboardStatsView(APIView):
                     else 'Pharmacie en attente de validation'
                 ),
                 'date': pharmacy.date_creation,
+                'status': (
+                    'validee'
+                    if pharmacy.est_valide
+                    else pharmacy.statut_validation or 'en_attente'
+                ),
             }
             for pharmacy in latest_pharmacies
         ] + [
@@ -66,6 +72,7 @@ class AdminDashboardStatsView(APIView):
                     f'({reservation.statut})'
                 ),
                 'date': reservation.date_reservation,
+                'status': reservation.statut,
             }
             for reservation in latest_reservations
         ]
@@ -80,7 +87,9 @@ class AdminDashboardStatsView(APIView):
             'pharmacies': {
                 'total': pharmacies.count(),
                 'validees': pharmacies.filter(est_valide=True).count(),
-                'en_attente': pharmacies.filter(est_valide=False).count(),
+                'en_attente': pharmacies.filter(statut_validation='en_attente').count(),
+                'suspendues': pharmacies.filter(statut_validation='suspendue').count(),
+                'refusees': pharmacies.filter(statut_validation='refusee').count(),
             },
             'users': {
                 'total': users.count(),
@@ -94,16 +103,20 @@ class AdminDashboardStatsView(APIView):
                 'total': reservations.count(),
                 'en_attente': reservations.filter(statut='en_attente').count(),
                 'confirmees': reservations.filter(statut='confirmee').count(),
+                'refusees': reservations.filter(statut='refusee').count(),
                 'recuperees': reservations.filter(statut='recuperee').count(),
+                'annulees': reservations.filter(statut='annulee').count(),
             },
             'medicaments': {
                 'total': Medicament.objects.count(),
             },
             'stocks': {
-                'total': Stock.objects.count(),
-                'rupture': Stock.objects.filter(quantite=0).count(),
+                'total': stocks.count(),
+                'faibles': stocks.filter(quantite__gt=0, quantite__lte=5).count(),
+                'rupture': stocks.filter(quantite=0).count(),
             },
             'latest_activities': latest_activities,
+            'recent_activities': latest_activities,
         })
 
 

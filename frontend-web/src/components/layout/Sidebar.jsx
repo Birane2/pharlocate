@@ -9,6 +9,7 @@ import {
   faClock,
   faHospital,
   faSignOutAlt,
+  faUserShield,
   faUsers,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../context/AuthContext";
@@ -44,9 +45,12 @@ function Sidebar({
   links = [],
   title = "Navigation",
   showLogout = false,
+  showUserFooter = false,
   width = "compact",
 }) {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
+  const displayName = user?.username || "Administrateur";
+  const avatarLabel = displayName.slice(0, 2).toUpperCase();
 
   return (
     <aside
@@ -86,6 +90,25 @@ function Sidebar({
           })}
         </nav>
       </div>
+
+      {showUserFooter && (
+        <div className="sticky bottom-0 border-t border-[#E5E7EB] bg-white/95 p-4">
+          <div className="flex items-center gap-3 rounded-2xl bg-[#F8FAFC] px-3 py-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#2F6E9E] to-[#2FA6A3] text-xs font-black text-white">
+              {avatarLabel}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-[#1C2B4A]">
+                {displayName}
+              </p>
+              <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-[#2F6E9E]/10 px-2 py-0.5 text-[10px] font-bold text-[#2F6E9E]">
+                <FontAwesomeIcon icon={faUserShield} className="h-2.5 w-2.5" />
+                Administrateur
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showLogout && (
         <div className="sticky bottom-0 border-t border-[#2F6E9E]/10 bg-white/95 p-4">
