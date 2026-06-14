@@ -12,12 +12,7 @@ class ReservationItemCreateSerializer(serializers.Serializer):
 
 class ReservationItemSerializer(serializers.ModelSerializer):
     medicament_nom = serializers.CharField(
-        source='stock.medicament.nom',
-        read_only=True
-    )
-
-    pharmacie_nom = serializers.CharField(
-        source='stock.pharmacie.nom',
+        source='medicament.nom',
         read_only=True
     )
 
@@ -25,9 +20,8 @@ class ReservationItemSerializer(serializers.ModelSerializer):
         model = ReservationItem
         fields = [
             'id',
-            'stock',
+            'medicament',
             'medicament_nom',
-            'pharmacie_nom',
             'quantite',
             'prix_unitaire',
             'sous_total',
@@ -66,6 +60,7 @@ class ReservationSerializer(serializers.ModelSerializer):
             'items_data',
             'type_reservation',
             'statut',
+            'statut_paiement',
             'montant_medicaments',
             'frais_livraison',
             'montant_total',
@@ -78,6 +73,7 @@ class ReservationSerializer(serializers.ModelSerializer):
             'user',
             'user_name',
             'statut',
+            'statut_paiement',
             'montant_medicaments',
             'frais_livraison',
             'montant_total',
@@ -132,8 +128,9 @@ class ReservationSerializer(serializers.ModelSerializer):
 
             ReservationItem.objects.create(
                 reservation=reservation,
-                stock=stock,
-                quantite=item['quantite']
+                medicament=stock.medicament,
+                quantite=item['quantite'],
+                prix_unitaire=stock.prix,
             )
 
         calculate_reservation_amount(reservation)

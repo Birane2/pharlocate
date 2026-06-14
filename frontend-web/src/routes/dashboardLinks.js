@@ -70,7 +70,7 @@ export const pharmacistLinks = [
     icon: faCreditCard,
   },
   {
-    label: "Moyens paiement",
+    label: "Modes de paiement",
     shortLabel: "Moy.",
     path: "/pharmacien/payment-methods",
     icon: faCreditCard,

@@ -5,6 +5,46 @@ export const createReservation = async (payload) => {
   return res.data;
 };
 
+export const checkoutReservation = async ({
+  pharmacie,
+  items,
+  typeReservation,
+  paymentMethod,
+  clientPhone,
+  transactionId,
+  paymentProof,
+  delivery,
+}) => {
+  const formData = new FormData();
+
+  formData.append("pharmacie", String(pharmacie));
+  formData.append("type_reservation", typeReservation);
+  formData.append("mode_retrait", typeReservation);
+  formData.append("items", JSON.stringify(items));
+  formData.append("payment_method", String(paymentMethod));
+  formData.append("numero_client", clientPhone);
+  formData.append("client_phone", clientPhone);
+  formData.append("transaction_id", transactionId);
+  formData.append("reference_paiement", transactionId);
+
+  if (paymentProof) {
+    formData.append("capture_paiement", paymentProof);
+    formData.append("payment_proof", paymentProof);
+  }
+
+  if (typeReservation === "livraison" && delivery) {
+    formData.append("delivery", JSON.stringify(delivery));
+    formData.append("adresse_livraison", delivery.adresse_livraison || "");
+    formData.append("telephone", delivery.telephone || clientPhone);
+    formData.append("latitude", String(delivery.latitude || ""));
+    formData.append("longitude", String(delivery.longitude || ""));
+    formData.append("note", delivery.note || "");
+  }
+
+  const res = await API.post("/api/reservations/checkout/", formData);
+  return res.data;
+};
+
 export const getUserReservations = async (params = {}) => {
   const res = await API.get("/api/user/reservations/", { params });
 

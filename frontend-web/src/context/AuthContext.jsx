@@ -4,11 +4,42 @@ import API from "../api/axios";
 
 const AuthContext = createContext(null);
 
+function isJwtExpired(token) {
+  if (!token) {
+    return true;
+  }
+
+  try {
+    const encodedPayload = token
+      .split(".")[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+    const padding = "=".repeat((4 - (encodedPayload.length % 4)) % 4);
+    const payload = JSON.parse(atob(encodedPayload + padding));
+    return !payload.exp || payload.exp * 1000 <= Date.now();
+  } catch {
+    return true;
+  }
+}
+
+function clearStoredSession() {
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
+  localStorage.removeItem("user");
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(() =>
-    Boolean(localStorage.getItem("access_token"))
-  );
+  const [loading, setLoading] = useState(() => {
+    const token = localStorage.getItem("access_token");
+
+    if (isJwtExpired(token)) {
+      clearStoredSession();
+      return false;
+    }
+
+    return true;
+  });
 
   const getProfile = async () => {
     try {
@@ -18,9 +49,7 @@ export function AuthProvider({ children }) {
       return res.data;
     } catch {
       setUser(null);
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-      localStorage.removeItem("user");
+      clearStoredSession();
       return null;
     } finally {
       setLoading(false);
@@ -30,7 +59,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const token = localStorage.getItem("access_token");
 
-    if (!token) {
+    if (!token || isJwtExpired(token)) {
+      clearStoredSession();
       return;
     }
 
@@ -101,9 +131,7 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("user");
+    clearStoredSession();
     setUser(null);
     window.location.href = "/login";
   };

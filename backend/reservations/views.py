@@ -1,3 +1,5 @@
+from django.core.exceptions import ValidationError
+
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -5,6 +7,7 @@ from rest_framework.response import Response
 
 from .models import Reservation
 from .serializers import ReservationSerializer
+from .services import cancel_reservation_by_user
 
 
 class ReservationListCreateView(generics.ListCreateAPIView):
@@ -15,16 +18,14 @@ class ReservationListCreateView(generics.ListCreateAPIView):
         user = self.request.user
 
         if user.role == 'admin':
-            return Reservation.objects.all().order_by('-date_creation')
+            return Reservation.objects.all().order_by('-date_reservation')
 
         if user.role == 'pharmacien':
             return Reservation.objects.filter(
-                pharmacie__pharmacien=user
-            ).order_by('-date_creation')
+                pharmacie__user=user
+            ).order_by('-date_reservation')
 
-        return Reservation.objects.filter(
-            user=user
-        ).order_by('-date_creation')
+        return Reservation.objects.filter(user=user).order_by('-date_reservation')
 
 
 class ReservationDetailView(generics.RetrieveAPIView):
@@ -38,9 +39,7 @@ class ReservationDetailView(generics.RetrieveAPIView):
             return Reservation.objects.all()
 
         if user.role == 'pharmacien':
-            return Reservation.objects.filter(
-                pharmacie__pharmacien=user
-            )
+            return Reservation.objects.filter(pharmacie__user=user)
 
         return Reservation.objects.filter(user=user)
 
@@ -49,44 +48,33 @@ class ReservationDetailView(generics.RetrieveAPIView):
 @permission_classes([IsAuthenticated])
 def cancel_reservation(request, pk):
     try:
-        reservation = Reservation.objects.get(pk=pk)
+        reservation = Reservation.objects.select_related(
+            'user',
+            'pharmacie',
+            'pharmacie__user',
+        ).get(pk=pk)
     except Reservation.DoesNotExist:
-        return Response({
-            'error': 'Réservation introuvable.'
-        }, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {'error': 'Reservation introuvable.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
-    if reservation.user != request.user:
-        return Response({
-            'error': "Vous ne pouvez annuler que vos propres réservations."
-        }, status=status.HTTP_403_FORBIDDEN)
+    try:
+        reservation = cancel_reservation_by_user(reservation, request.user)
+    except ValidationError as exc:
+        status_code = status.HTTP_400_BAD_REQUEST
+        if reservation.user_id != request.user.id:
+            status_code = status.HTTP_403_FORBIDDEN
 
-    if reservation.statut != 'en_attente':
-        return Response({
-            'error': "Cette réservation ne peut plus être annulée."
-        }, status=status.HTTP_400_BAD_REQUEST)
-
-    if hasattr(reservation, 'payment'):
-        payment = reservation.payment
-
-        if payment.status != 'en_attente_verification':
-            return Response({
-                'error': "Le paiement est déjà validé ou traité. Vous ne pouvez plus annuler directement."
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        payment.status = 'annule'
-        payment.save()
-
-    if hasattr(reservation, 'delivery'):
-        delivery = reservation.delivery
-        delivery.status = 'annulee'
-        delivery.save()
-
-    reservation.statut = 'annulee'
-    reservation.save()
+        message = exc.messages[0] if hasattr(exc, 'messages') else str(exc)
+        return Response({'error': message}, status=status_code)
 
     serializer = ReservationSerializer(reservation, context={'request': request})
 
-    return Response({
-        'message': 'Réservation annulée avec succès.',
-        'data': serializer.data
-    }, status=status.HTTP_200_OK)
+    return Response(
+        {
+            'message': 'Reservation annulee avec succes.',
+            'data': serializer.data,
+        },
+        status=status.HTTP_200_OK,
+    )

@@ -23,23 +23,23 @@ class DeliveryAdmin(admin.ModelAdmin):
         'reservation',
         'pharmacy',
         'user',
-        'delivery_phone',
+        'telephone',
         'distance_km',
-        'delivery_fee',
-        'status',
-        'created_at',
-        'delivered_at',
+        'frais_livraison',
+        'statut',
+        'date_creation',
+        'date_livraison_reelle',
     )
 
     list_filter = (
-        'status',
-        'created_at',
-        'delivered_at',
+        'statut',
+        'date_creation',
+        'date_livraison_reelle',
     )
 
     search_fields = (
-        'delivery_phone',
-        'delivery_address',
+        'telephone',
+        'adresse_livraison',
         'pharmacy__nom',
         'user__username',
         'user__phone_number',
@@ -47,8 +47,7 @@ class DeliveryAdmin(admin.ModelAdmin):
 
     readonly_fields = (
         'distance_km',
-        'delivery_fee',
-        'created_at',
-        'updated_at',
-        'delivered_at',
+        'frais_livraison',
+        'date_creation',
+        'date_livraison_reelle',
     )

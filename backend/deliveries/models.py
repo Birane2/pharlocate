@@ -1,5 +1,4 @@
 from decimal import Decimal
-from math import asin, cos, radians, sin, sqrt
 
 from django.db import models
 from django.utils import timezone
@@ -9,15 +8,14 @@ class DeliveryFeeConfig(models.Model):
     price_per_km = models.DecimalField(
         max_digits=8,
         decimal_places=2,
-        default=Decimal('10.00')
+        default=Decimal('10.00'),
     )
     minimum_fee = models.DecimalField(
         max_digits=8,
         decimal_places=2,
-        default=Decimal('50.00')
+        default=Decimal('50.00'),
     )
     is_active = models.BooleanField(default=True)
-
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -29,118 +27,165 @@ class DeliveryFeeConfig(models.Model):
 
 
 class Delivery(models.Model):
-    DELIVERY_STATUS_CHOICES = (
-        ('en_attente', 'En attente'),
-        ('en_preparation', 'En préparation'),
-        ('en_cours', 'En cours'),
-        ('livree', 'Livrée'),
-        ('annulee', 'Annulée'),
-        ('echec', 'Échec livraison'),
+    STATUS_PENDING = 'en_attente'
+    STATUS_IN_PROGRESS = 'en_cours'
+    STATUS_DELIVERED = 'livree'
+    STATUS_CANCELLED = 'annulee'
+
+    STATUT_CHOICES = (
+        (STATUS_PENDING, 'En attente'),
+        (STATUS_IN_PROGRESS, 'En cours'),
+        (STATUS_DELIVERED, 'Livree'),
+        (STATUS_CANCELLED, 'Annulee'),
     )
 
     reservation = models.OneToOneField(
         'reservations.Reservation',
         on_delete=models.CASCADE,
-        related_name='delivery'
+        related_name='delivery',
     )
-
     pharmacy = models.ForeignKey(
         'pharmacies.Pharmacy',
         on_delete=models.CASCADE,
-        related_name='deliveries'
+        related_name='deliveries',
     )
-
     user = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
-        related_name='deliveries'
+        related_name='deliveries',
     )
-
-    delivery_address = models.TextField()
-    delivery_phone = models.CharField(max_length=30)
-    delivery_note = models.TextField(blank=True, null=True)
-
-    client_latitude = models.DecimalField(
-        max_digits=10,
-        decimal_places=7
+    adresse_livraison = models.TextField()
+    telephone = models.CharField(max_length=20)
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
     )
-    client_longitude = models.DecimalField(
-        max_digits=10,
-        decimal_places=7
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
     )
-
+    note = models.TextField(blank=True)
+    frais_livraison = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+    )
     distance_km = models.DecimalField(
         max_digits=8,
         decimal_places=2,
-        default=Decimal('0.00')
+        default=Decimal('0.00'),
+        help_text='Distance estimee entre la pharmacie et le client.',
     )
-
-    delivery_fee = models.DecimalField(
-        max_digits=8,
+    tarif_par_km = models.DecimalField(
+        max_digits=10,
         decimal_places=2,
-        default=Decimal('0.00')
+        default=Decimal('50.00'),
+        help_text='Tarif utilise pour calculer les frais de livraison.',
     )
-
-    status = models.CharField(
+    statut = models.CharField(
         max_length=30,
-        choices=DELIVERY_STATUS_CHOICES,
-        default='en_attente'
+        choices=STATUT_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
     )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    delivered_at = models.DateTimeField(null=True, blank=True)
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_livraison_estimee = models.DateTimeField(null=True, blank=True)
+    date_livraison_reelle = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ['-date_creation']
         verbose_name = 'Livraison'
         verbose_name_plural = 'Livraisons'
+        indexes = [
+            models.Index(
+                fields=['statut', 'date_creation'],
+                name='deliveries__statut_0b0e0b_idx',
+            ),
+            models.Index(
+                fields=['pharmacy', 'statut'],
+                name='deliveries__pharmac_1264a6_idx',
+            ),
+        ]
 
-    @staticmethod
-    def calculate_distance_km(lat1, lon1, lat2, lon2):
-        radius = 6371
+    @property
+    def status(self):
+        return self.statut
 
-        lat1 = radians(float(lat1))
-        lon1 = radians(float(lon1))
-        lat2 = radians(float(lat2))
-        lon2 = radians(float(lon2))
+    @status.setter
+    def status(self, value):
+        self.statut = value
 
-        dlat = lat2 - lat1
-        dlon = lon2 - lon1
+    @property
+    def delivery_address(self):
+        return self.adresse_livraison
 
-        a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-        c = 2 * asin(sqrt(a))
+    @property
+    def delivery_phone(self):
+        return self.telephone
 
-        return Decimal(str(round(radius * c, 2)))
+    @property
+    def delivery_note(self):
+        return self.note
 
-    @classmethod
-    def calculate_fee(cls, distance_km):
-        config = DeliveryFeeConfig.objects.filter(is_active=True).first()
+    @property
+    def client_latitude(self):
+        return self.latitude
 
-        if not config:
-            return Decimal('0.00')
+    @property
+    def client_longitude(self):
+        return self.longitude
 
-        fee = Decimal(distance_km) * config.price_per_km
+    @property
+    def delivery_fee(self):
+        return self.frais_livraison
 
-        if fee < config.minimum_fee:
-            return config.minimum_fee
-
-        return fee.quantize(Decimal('0.01'))
+    @property
+    def delivered_at(self):
+        return self.date_livraison_reelle
 
     def save(self, *args, **kwargs):
-        if self.pharmacy and self.client_latitude and self.client_longitude:
-            self.distance_km = self.calculate_distance_km(
-                self.pharmacy.latitude,
-                self.pharmacy.longitude,
-                self.client_latitude,
-                self.client_longitude
-            )
-            self.delivery_fee = self.calculate_fee(self.distance_km)
-
-        if self.status == 'livree' and self.delivered_at is None:
-            self.delivered_at = timezone.now()
+        if self.statut == self.STATUS_DELIVERED and self.date_livraison_reelle is None:
+            self.date_livraison_reelle = timezone.now()
 
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Livraison #{self.id} - {self.status}"
+        return f"Livraison #{self.id} - {self.statut}"
+
+
+class DeliveryStatusHistory(models.Model):
+    delivery = models.ForeignKey(
+        Delivery,
+        on_delete=models.CASCADE,
+        related_name='status_history',
+    )
+    ancien_statut = models.CharField(
+        max_length=30,
+        choices=Delivery.STATUT_CHOICES,
+        blank=True,
+    )
+    nouveau_statut = models.CharField(
+        max_length=30,
+        choices=Delivery.STATUT_CHOICES,
+    )
+    changed_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='delivery_status_changes',
+    )
+    commentaire = models.TextField(blank=True)
+    date_changement = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date_changement']
+        verbose_name = 'Historique statut livraison'
+        verbose_name_plural = 'Historiques statuts livraison'
+
+    def __str__(self):
+        return f"Livraison #{self.delivery_id}: {self.ancien_statut} -> {self.nouveau_statut}"

@@ -15,6 +15,8 @@ import {
 } from "../../services/financeService";
 
 const initialForm = {
+  beneficiary_name: "",
+  payment_instructions: "",
   bankily_number: "",
   masrivi_number: "",
   click_number: "",
@@ -31,8 +33,8 @@ const paymentFields = [
   },
   {
     key: "masrivi_number",
-    label: "Masrvi",
-    hint: "Numero Masrvi de la pharmacie",
+    label: "Masrivi",
+    hint: "Numero Masrivi de la pharmacie",
   },
   {
     key: "click_number",
@@ -71,6 +73,8 @@ function PaymentMethodsConfig() {
     try {
       const data = await getPharmacienPaymentMethods();
       setForm({
+        beneficiary_name: data.beneficiary_name || "",
+        payment_instructions: data.payment_instructions || "",
         bankily_number: data.bankily_number || "",
         masrivi_number: data.masrivi_number || "",
         click_number: data.click_number || "",
@@ -101,6 +105,8 @@ function PaymentMethodsConfig() {
         }
 
         setForm({
+          beneficiary_name: data.beneficiary_name || "",
+          payment_instructions: data.payment_instructions || "",
           bankily_number: data.bankily_number || "",
           masrivi_number: data.masrivi_number || "",
           click_number: data.click_number || "",
@@ -147,8 +153,10 @@ function PaymentMethodsConfig() {
 
     try {
       const response = await updatePharmacienPaymentMethods(form);
-      const data = response.payment_methods || response;
+      const data = response.data || response.payment_methods || response;
       setForm({
+        beneficiary_name: data.beneficiary_name || "",
+        payment_instructions: data.payment_instructions || "",
         bankily_number: data.bankily_number || "",
         masrivi_number: data.masrivi_number || "",
         click_number: data.click_number || "",
@@ -156,7 +164,7 @@ function PaymentMethodsConfig() {
         bci_pay_number: data.bci_pay_number || "",
         is_active: data.is_active !== false,
       });
-      setSuccess("Methodes de paiement mises a jour avec succes.");
+      setSuccess("Modes de paiement mis a jour avec succes.");
     } catch (err) {
       setError(
         err?.response?.data?.detail ||
@@ -170,7 +178,7 @@ function PaymentMethodsConfig() {
 
   return (
     <PharmacienLayout
-      title="Methodes de paiement"
+      title="Modes de paiement"
       headerSubtitle="Configurez les numeros affiches aux patients."
     >
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -208,6 +216,45 @@ function PaymentMethodsConfig() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="rounded-2xl border border-[#E2E8F2] bg-[#F8FAFC] p-4">
+                  <span className="flex items-center gap-2 text-sm font-black text-[#1C2B4A]">
+                    <FontAwesomeIcon
+                      icon={faCreditCard}
+                      className="text-[#2F6E9E]"
+                    />
+                    Nom beneficiaire
+                  </span>
+                  <input
+                    value={form.beneficiary_name}
+                    onChange={(event) =>
+                      updateField("beneficiary_name", event.target.value)
+                    }
+                    placeholder="Nom affiche au patient"
+                    className="mt-3 w-full rounded-xl border border-[#D8E3EE] bg-white px-3 py-2 text-sm font-bold text-[#1C2B4A] outline-none transition focus:border-[#2F6E9E] focus:ring-4 focus:ring-[#2F6E9E]/10"
+                  />
+                </label>
+
+                <label className="rounded-2xl border border-[#E2E8F2] bg-[#F8FAFC] p-4">
+                  <span className="flex items-center gap-2 text-sm font-black text-[#1C2B4A]">
+                    <FontAwesomeIcon
+                      icon={faMobileScreenButton}
+                      className="text-[#2F6E9E]"
+                    />
+                    Instructions
+                  </span>
+                  <textarea
+                    value={form.payment_instructions}
+                    onChange={(event) =>
+                      updateField("payment_instructions", event.target.value)
+                    }
+                    rows={3}
+                    placeholder="Ex: Payez puis envoyez la reference et une capture."
+                    className="mt-3 w-full resize-none rounded-xl border border-[#D8E3EE] bg-white px-3 py-2 text-sm font-bold text-[#1C2B4A] outline-none transition focus:border-[#2F6E9E] focus:ring-4 focus:ring-[#2F6E9E]/10"
+                  />
+                </label>
+              </div>
+
               <div className="grid gap-3 md:grid-cols-2">
                 {paymentFields.map((field) => (
                   <label
@@ -278,7 +325,7 @@ function PaymentMethodsConfig() {
             Resume
           </h3>
           <p className="mt-2 text-sm font-semibold text-[#6B7280]">
-            {configuredCount} methode(s) mobile money configuree(s).
+            {configuredCount} mode(s) de paiement configure(s).
           </p>
           <div className="mt-4 rounded-2xl bg-[#F8FAFC] p-4">
             <p className="text-xs font-bold uppercase tracking-wide text-[#6B7280]">

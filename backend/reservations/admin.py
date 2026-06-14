@@ -26,7 +26,7 @@ class ReservationAdmin(admin.ModelAdmin):
     list_filter = (
         'statut',
         'type_reservation',
-        'date_creation',
+        'date_reservation',
     )
 
     search_fields = (
@@ -51,7 +51,7 @@ class ReservationItemAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'reservation',
-        'stock',
+        'medicament',
         'quantite',
         'prix_unitaire',
         'sous_total',
@@ -59,7 +59,7 @@ class ReservationItemAdmin(admin.ModelAdmin):
     )
 
     search_fields = (
-        'stock__medicament__nom',
+        'medicament__nom',
         'reservation__pharmacie__nom',
     )
 
