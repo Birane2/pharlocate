@@ -450,7 +450,7 @@ class PharmacienDashboardStatsView(APIView):
                 'en_attente': reservations.filter(statut='en_attente').count(),
                 'confirmees': reservations.filter(statut='confirmee').count(),
                 'annulees': reservations.filter(statut='annulee').count(),
-                'recuperees': reservations.filter(statut='recuperee').count(),
+                'recuperees': reservations.filter(statut='livree').count(),
                 'recentes': [
                     {
                         'id': reservation.id,

@@ -13,7 +13,7 @@ DEFAULT_DELIVERY_PRICE_PER_KM = Decimal('50.00')
 
 
 def can_create_delivery_for_reservation(reservation):
-    return reservation.mode_retrait == 'livraison'
+    return reservation.type_reservation == reservation.TYPE_DELIVERY
 
 
 def get_delivery_price_per_km():
@@ -56,6 +56,19 @@ def calculate_distance_km(start_latitude, start_longitude, end_latitude, end_lon
 
 
 def calculate_delivery_fee(reservation, latitude=None, longitude=None):
+    if latitude is None or longitude is None:
+        raise ValidationError(
+            'La position GPS du client est obligatoire pour calculer la livraison.'
+        )
+
+    if (
+        reservation.pharmacie.latitude is None
+        or reservation.pharmacie.longitude is None
+    ):
+        raise ValidationError(
+            'La pharmacie doit configurer sa position GPS avant de proposer la livraison.'
+        )
+
     tarif_par_km = get_delivery_price_per_km()
     distance_km = calculate_distance_km(
         reservation.pharmacie.latitude,
@@ -63,10 +76,6 @@ def calculate_delivery_fee(reservation, latitude=None, longitude=None):
         latitude,
         longitude,
     )
-
-    if distance_km <= 0:
-        fallback_fee = reservation.frais_livraison or reservation.DEFAULT_FRAIS_LIVRAISON
-        return distance_km, tarif_par_km, round_money(fallback_fee)
 
     frais_livraison = get_delivery_base_fee() + (distance_km * tarif_par_km)
     return distance_km, tarif_par_km, round_money(frais_livraison)
@@ -131,6 +140,23 @@ def change_delivery_status(delivery, nouveau_statut, changed_by=None, commentair
     ancien_statut = delivery.statut
     if ancien_statut == nouveau_statut:
         raise ValidationError('La livraison possede deja ce statut.')
+
+    transitions = {
+        Delivery.STATUS_PENDING: {
+            Delivery.STATUS_IN_PROGRESS,
+            Delivery.STATUS_CANCELLED,
+        },
+        Delivery.STATUS_IN_PROGRESS: {
+            Delivery.STATUS_DELIVERED,
+            Delivery.STATUS_CANCELLED,
+        },
+        Delivery.STATUS_DELIVERED: set(),
+        Delivery.STATUS_CANCELLED: set(),
+    }
+    if nouveau_statut not in transitions.get(ancien_statut, set()):
+        raise ValidationError(
+            f'Transition de livraison interdite: {ancien_statut} -> {nouveau_statut}.'
+        )
 
     delivery.statut = nouveau_statut
     delivery.save()

@@ -142,7 +142,7 @@ class AdminDashboardStatsView(APIView):
                 'en_attente': reservations.filter(statut='en_attente').count(),
                 'confirmees': reservations.filter(statut='confirmee').count(),
                 'refusees': self._get_reservation_refused_count(reservations),
-                'recuperees': reservations.filter(statut='recuperee').count(),
+                'recuperees': reservations.filter(statut='livree').count(),
                 'annulees': reservations.filter(statut='annulee').count(),
             },
             'medicaments': {
@@ -173,7 +173,7 @@ class AdminDashboardStatsView(APIView):
                 'reservations_by_status': {
                     'en_attente': reservations.filter(statut='en_attente').count(),
                     'confirmee': reservations.filter(statut='confirmee').count(),
-                    'recuperee': reservations.filter(statut='recuperee').count(),
+                    'livree': reservations.filter(statut='livree').count(),
                     'refusee': self._get_reservation_refused_count(reservations),
                 },
             },

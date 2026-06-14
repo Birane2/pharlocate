@@ -1,161 +1,176 @@
-from django.core.exceptions import ValidationError as DjangoValidationError
-from django.shortcuts import get_object_or_404
-from rest_framework import generics, status
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
-from config.permissions import (
-    IsAdminRole,
-    IsAuthenticatedWithTokenMessage,
-    IsPharmacien,
-)
+from reservations.models import Reservation
+from reservations.services import calculate_reservation_amount
 
 from .models import Delivery
-from .permissions import IsAdminOrDeliveryOwnerOrPharmacist, is_admin_user
-from .serializers import (
-    DeliveryCreateSerializer,
-    DeliverySerializer,
-    DeliveryStatusUpdateSerializer,
-)
-from .services import change_delivery_status
+from .serializers import DeliverySerializer, DeliveryStatusUpdateSerializer
 
 
-def format_django_validation_error(exc):
-    if hasattr(exc, 'message_dict'):
-        return exc.message_dict
-
-    if hasattr(exc, 'messages'):
-        return {'detail': exc.messages}
-
-    return {'detail': str(exc)}
+def get_reservation_user(reservation):
+    return getattr(reservation, 'user', None)
 
 
-class DeliveryCreateView(APIView):
-    permission_classes = [IsAuthenticatedWithTokenMessage]
-
-    def post(self, request):
-        serializer = DeliveryCreateSerializer(
-            data=request.data,
-            context={'request': request},
-        )
-        serializer.is_valid(raise_exception=True)
-
-        try:
-            delivery = serializer.save()
-        except DjangoValidationError as exc:
-            return Response(
-                format_django_validation_error(exc),
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        return Response(
-            {
-                'message': 'Livraison creee avec succes.',
-                'delivery': DeliverySerializer(delivery).data,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+def get_reservation_pharmacy(reservation):
+    return (
+        getattr(reservation, 'pharmacie', None)
+        or getattr(reservation, 'pharmacy', None)
+    )
 
 
-class MyDeliveryListView(generics.ListAPIView):
-    serializer_class = DeliverySerializer
-    permission_classes = [IsAuthenticatedWithTokenMessage]
-
-    def get_queryset(self):
-        return (
-            Delivery.objects.filter(user=self.request.user)
-            .select_related('reservation', 'user', 'pharmacy')
-            .prefetch_related('status_history__changed_by')
-            .order_by('-date_creation')
-        )
+def is_pharmacy_owner(user, pharmacy):
+    return getattr(pharmacy, 'pharmacien', None) == user
 
 
-class DeliveryDetailView(generics.RetrieveAPIView):
-    serializer_class = DeliverySerializer
-    permission_classes = [
-        IsAuthenticatedWithTokenMessage,
-        IsAdminOrDeliveryOwnerOrPharmacist,
-    ]
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_delivery(request):
+    serializer = DeliverySerializer(data=request.data)
 
-    def get_queryset(self):
-        return (
-            Delivery.objects.select_related('reservation', 'user', 'pharmacy')
-            .prefetch_related('status_history__changed_by')
-            .order_by('-date_creation')
-        )
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    reservation = serializer.validated_data.get('reservation')
 
-class DeliveryStatusUpdateView(APIView):
-    permission_classes = [
-        IsAuthenticatedWithTokenMessage,
-        IsAdminOrDeliveryOwnerOrPharmacist,
-    ]
+    try:
+        reservation = Reservation.objects.get(id=reservation.id)
+    except Reservation.DoesNotExist:
+        return Response({
+            'error': 'Réservation introuvable.'
+        }, status=status.HTTP_404_NOT_FOUND)
 
-    def patch(self, request, pk):
-        delivery = get_object_or_404(
-            Delivery.objects.select_related('reservation', 'user', 'pharmacy'),
-            pk=pk,
-        )
-        self.check_object_permissions(request, delivery)
+    reservation_user = get_reservation_user(reservation)
+    reservation_pharmacy = get_reservation_pharmacy(reservation)
 
-        is_pharmacien_owner = (
-            getattr(request.user, 'role', None) == 'pharmacien'
-            and delivery.pharmacy.user_id == request.user.id
-        )
-        if not (is_admin_user(request.user) or is_pharmacien_owner):
-            return Response(
-                {'error': 'Seuls le pharmacien de la pharmacie ou un administrateur peuvent changer le statut.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+    if reservation_user != request.user:
+        return Response({
+            'error': "Vous ne pouvez créer une livraison que pour vos propres réservations."
+        }, status=status.HTTP_403_FORBIDDEN)
 
-        serializer = DeliveryStatusUpdateSerializer(
-            data=request.data,
-            context={'delivery': delivery},
-        )
-        serializer.is_valid(raise_exception=True)
+    if not reservation_pharmacy:
+        return Response({
+            'error': 'Aucune pharmacie associée à cette réservation.'
+        }, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            delivery = change_delivery_status(
-                delivery=delivery,
-                nouveau_statut=serializer.validated_data['statut'],
-                changed_by=request.user,
-                commentaire=serializer.validated_data.get('commentaire', ''),
-            )
-        except DjangoValidationError as exc:
-            return Response(
-                format_django_validation_error(exc),
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+    if hasattr(reservation, 'delivery'):
+        return Response({
+            'error': 'Une livraison existe déjà pour cette réservation.'
+        }, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(
-            {
-                'message': 'Statut de livraison mis a jour.',
-                'delivery': DeliverySerializer(delivery).data,
-            },
-            status=status.HTTP_200_OK,
-        )
+    delivery = serializer.save(
+        user=request.user,
+        pharmacy=reservation_pharmacy,
+        status='en_attente'
+    )
+
+    reservation.type_reservation = 'livraison'
+    reservation.frais_livraison = delivery.delivery_fee
+    reservation.save()
+
+    calculate_reservation_amount(reservation)
+
+    response_serializer = DeliverySerializer(delivery)
+
+    return Response({
+        'message': 'Livraison créée avec succès.',
+        'data': response_serializer.data
+    }, status=status.HTTP_201_CREATED)
 
 
-class PharmacienDeliveryListView(generics.ListAPIView):
-    serializer_class = DeliverySerializer
-    permission_classes = [IsAuthenticatedWithTokenMessage, IsPharmacien]
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def my_deliveries(request):
+    deliveries = Delivery.objects.filter(
+        user=request.user
+    ).order_by('-created_at')
 
-    def get_queryset(self):
-        return (
-            Delivery.objects.filter(pharmacy__user=self.request.user)
-            .select_related('reservation', 'user', 'pharmacy')
-            .prefetch_related('status_history__changed_by')
-            .order_by('-date_creation')
-        )
+    serializer = DeliverySerializer(deliveries, many=True)
+
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class AdminDeliveryListView(generics.ListAPIView):
-    serializer_class = DeliverySerializer
-    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def delivery_detail(request, pk):
+    try:
+        delivery = Delivery.objects.get(pk=pk)
+    except Delivery.DoesNotExist:
+        return Response({
+            'error': 'Livraison introuvable.'
+        }, status=status.HTTP_404_NOT_FOUND)
 
-    def get_queryset(self):
-        return (
-            Delivery.objects.select_related('reservation', 'user', 'pharmacy')
-            .prefetch_related('status_history__changed_by')
-            .order_by('-date_creation')
-        )
+    is_owner = delivery.user == request.user
+    is_pharmacist = is_pharmacy_owner(request.user, delivery.pharmacy)
+    is_admin = request.user.role == 'admin'
+
+    if not (is_owner or is_pharmacist or is_admin):
+        return Response({
+            'error': "Vous n'avez pas la permission de voir cette livraison."
+        }, status=status.HTTP_403_FORBIDDEN)
+
+    serializer = DeliverySerializer(delivery)
+
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pharmacist_deliveries(request):
+    deliveries = Delivery.objects.filter(
+        pharmacy__pharmacien=request.user
+    ).order_by('-created_at')
+
+    serializer = DeliverySerializer(deliveries, many=True)
+
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_delivery_status(request, pk):
+    try:
+        delivery = Delivery.objects.get(pk=pk)
+    except Delivery.DoesNotExist:
+        return Response({
+            'error': 'Livraison introuvable.'
+        }, status=status.HTTP_404_NOT_FOUND)
+
+    is_pharmacist = is_pharmacy_owner(request.user, delivery.pharmacy)
+    is_admin = request.user.role == 'admin'
+
+    if not (is_pharmacist or is_admin):
+        return Response({
+            'error': "Vous n'avez pas la permission de modifier cette livraison."
+        }, status=status.HTTP_403_FORBIDDEN)
+
+    serializer = DeliveryStatusUpdateSerializer(data=request.data)
+
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    delivery.status = serializer.validated_data['status']
+
+    if delivery.status == 'livree':
+        delivery.delivered_at = timezone.now()
+
+        if delivery.reservation.statut != 'livree':
+            delivery.reservation.statut = 'livree'
+            delivery.reservation.save()
+
+    if delivery.status == 'annulee':
+        if delivery.reservation.statut not in ['livree', 'annulee']:
+            delivery.reservation.statut = 'annulee'
+            delivery.reservation.save()
+
+    delivery.save()
+
+    response_serializer = DeliverySerializer(delivery)
+
+    return Response({
+        'message': 'Statut livraison mis à jour avec succès.',
+        'data': response_serializer.data
+    }, status=status.HTTP_200_OK)

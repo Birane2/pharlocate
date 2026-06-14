@@ -1,10 +1,12 @@
 from django.contrib import admin
+
 from .models import Reservation, ReservationItem
 
 
 class ReservationItemInline(admin.TabularInline):
     model = ReservationItem
-    extra = 1
+    extra = 0
+    readonly_fields = ('prix_unitaire', 'sous_total', 'created_at')
 
 
 @admin.register(Reservation)
@@ -13,29 +15,56 @@ class ReservationAdmin(admin.ModelAdmin):
         'id',
         'user',
         'pharmacie',
+        'type_reservation',
         'statut',
-        'mode_retrait',
-        'statut_paiement',
+        'montant_medicaments',
+        'frais_livraison',
         'montant_total',
-        'date_reservation',
+        'date_creation',
     )
+
     list_filter = (
         'statut',
-        'mode_retrait',
-        'statut_paiement',
-        'date_reservation',
-        'pharmacie',
+        'type_reservation',
+        'date_creation',
     )
-    search_fields = ('user__username', 'pharmacie__nom')
+
+    search_fields = (
+        'user__username',
+        'user__phone_number',
+        'pharmacie__nom',
+    )
+
     readonly_fields = (
         'montant_medicaments',
         'frais_livraison',
         'montant_total',
+        'date_creation',
+        'date_modification',
     )
+
     inlines = [ReservationItemInline]
 
 
 @admin.register(ReservationItem)
 class ReservationItemAdmin(admin.ModelAdmin):
-    list_display = ('reservation', 'medicament', 'quantite')
-    search_fields = ('reservation__id', 'medicament__nom')
+    list_display = (
+        'id',
+        'reservation',
+        'stock',
+        'quantite',
+        'prix_unitaire',
+        'sous_total',
+        'created_at',
+    )
+
+    search_fields = (
+        'stock__medicament__nom',
+        'reservation__pharmacie__nom',
+    )
+
+    readonly_fields = (
+        'prix_unitaire',
+        'sous_total',
+        'created_at',
+    )

@@ -103,6 +103,12 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 3,
     'EXCEPTION_HANDLER': 'config.exception_handlers.api_exception_handler',
+
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+        'rest_framework.parsers.FormParser',
+        'rest_framework.parsers.MultiPartParser',
+    ],
 }
 
 ROOT_URLCONF = 'config.urls'
@@ -192,6 +198,10 @@ AUTH_USER_MODEL = 'accounts.User'
 
 DELIVERY_BASE_FEE = os.getenv('DELIVERY_BASE_FEE', '0.00')
 DELIVERY_PRICE_PER_KM = os.getenv('DELIVERY_PRICE_PER_KM', '50.00')
+MANUAL_PAYMENT_COMMISSION_RATE = os.getenv(
+    'MANUAL_PAYMENT_COMMISSION_RATE',
+    '0.00',
+)
 
 OTP_DEBUG_PRINT = os.getenv('OTP_DEBUG_PRINT', 'True').lower() in {
     '1',

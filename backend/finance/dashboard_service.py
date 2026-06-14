@@ -106,9 +106,7 @@ def get_payment_stats(payment_queryset):
 def get_delivery_stats(delivery_queryset):
     active_statuses = [
         Delivery.STATUS_PENDING,
-        Delivery.STATUS_PREPARING,
-        Delivery.STATUS_COURIER_ASSIGNED,
-        Delivery.STATUS_ON_ROUTE,
+        Delivery.STATUS_IN_PROGRESS,
     ]
     return {
         'total': delivery_queryset.count(),

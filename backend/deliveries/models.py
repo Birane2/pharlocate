@@ -1,190 +1,146 @@
 from decimal import Decimal
+from math import asin, cos, radians, sin, sqrt
 
-from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
-from pharmacies.models import Pharmacy
-from reservations.models import Reservation
+
+class DeliveryFeeConfig(models.Model):
+    price_per_km = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=Decimal('10.00')
+    )
+    minimum_fee = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        default=Decimal('50.00')
+    )
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Configuration frais livraison'
+        verbose_name_plural = 'Configurations frais livraison'
+
+    def __str__(self):
+        return f"{self.price_per_km} MRU/km - minimum {self.minimum_fee} MRU"
 
 
 class Delivery(models.Model):
-    STATUS_PENDING = 'en_attente'
-    STATUS_PREPARING = 'en_preparation'
-    STATUS_COURIER_ASSIGNED = 'livreur_assigne'
-    STATUS_ON_ROUTE = 'en_route'
-    STATUS_DELIVERED = 'livree'
-    STATUS_CANCELLED = 'annulee'
-    STATUS_FAILED = 'echec_livraison'
-
-    STATUT_CHOICES = [
-        (STATUS_PENDING, 'En attente'),
-        (STATUS_PREPARING, 'En preparation'),
-        (STATUS_COURIER_ASSIGNED, 'Livreur assigne'),
-        (STATUS_ON_ROUTE, 'En route'),
-        (STATUS_DELIVERED, 'Livree'),
-        (STATUS_CANCELLED, 'Annulee'),
-        (STATUS_FAILED, 'Echec livraison'),
-    ]
+    DELIVERY_STATUS_CHOICES = (
+        ('en_attente', 'En attente'),
+        ('en_preparation', 'En préparation'),
+        ('en_cours', 'En cours'),
+        ('livree', 'Livrée'),
+        ('annulee', 'Annulée'),
+        ('echec', 'Échec livraison'),
+    )
 
     reservation = models.OneToOneField(
-        Reservation,
+        'reservations.Reservation',
         on_delete=models.CASCADE,
-        related_name='delivery',
+        related_name='delivery'
     )
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='deliveries',
-    )
+
     pharmacy = models.ForeignKey(
-        Pharmacy,
+        'pharmacies.Pharmacy',
         on_delete=models.CASCADE,
-        related_name='deliveries',
+        related_name='deliveries'
     )
-    adresse_livraison = models.TextField()
-    telephone = models.CharField(max_length=20)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    note = models.TextField(blank=True)
+
+    user = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.CASCADE,
+        related_name='deliveries'
+    )
+
+    delivery_address = models.TextField()
+    delivery_phone = models.CharField(max_length=30)
+    delivery_note = models.TextField(blank=True, null=True)
+
+    client_latitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7
+    )
+    client_longitude = models.DecimalField(
+        max_digits=10,
+        decimal_places=7
+    )
+
     distance_km = models.DecimalField(
         max_digits=8,
         decimal_places=2,
-        default=Decimal('0.00'),
-        help_text='Distance estimee entre la pharmacie et le client.',
+        default=Decimal('0.00')
     )
-    tarif_par_km = models.DecimalField(
-        max_digits=10,
+
+    delivery_fee = models.DecimalField(
+        max_digits=8,
         decimal_places=2,
-        default=Decimal('50.00'),
-        help_text='Tarif utilise pour calculer les frais de livraison.',
+        default=Decimal('0.00')
     )
-    frais_livraison = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=Decimal('0.00'),
-    )
-    statut = models.CharField(
+
+    status = models.CharField(
         max_length=30,
-        choices=STATUT_CHOICES,
-        default=STATUS_PENDING,
-        db_index=True,
+        choices=DELIVERY_STATUS_CHOICES,
+        default='en_attente'
     )
-    date_creation = models.DateTimeField(auto_now_add=True)
-    date_livraison_estimee = models.DateTimeField(null=True, blank=True)
-    date_livraison_reelle = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        ordering = ['-date_creation']
-        indexes = [
-            models.Index(fields=['statut', 'date_creation']),
-            models.Index(fields=['pharmacy', 'statut']),
-        ]
+        ordering = ['-created_at']
         verbose_name = 'Livraison'
         verbose_name_plural = 'Livraisons'
 
-    def clean(self):
-        errors = {}
+    @staticmethod
+    def calculate_distance_km(lat1, lon1, lat2, lon2):
+        radius = 6371
 
-        if self.reservation_id:
-            if self.reservation.mode_retrait == 'retrait':
-                errors['reservation'] = (
-                    'Aucune livraison ne doit etre creee pour une reservation en retrait.'
-                )
+        lat1 = radians(float(lat1))
+        lon1 = radians(float(lon1))
+        lat2 = radians(float(lat2))
+        lon2 = radians(float(lon2))
 
-            if self.user_id and self.user_id != self.reservation.user_id:
-                errors['user'] = "L'utilisateur doit correspondre a la reservation."
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
 
-            if self.pharmacy_id and self.pharmacy_id != self.reservation.pharmacie_id:
-                errors['pharmacy'] = 'La pharmacie doit correspondre a la reservation.'
+        a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+        c = 2 * asin(sqrt(a))
 
-            if self.statut == self.STATUS_DELIVERED and self.reservation.statut == 'annulee':
-                errors['statut'] = (
-                    'Impossible de marquer une livraison comme livree '
-                    'si la reservation est annulee.'
-                )
+        return Decimal(str(round(radius * c, 2)))
 
-        if not (self.adresse_livraison or '').strip():
-            errors['adresse_livraison'] = "L'adresse de livraison est obligatoire."
+    @classmethod
+    def calculate_fee(cls, distance_km):
+        config = DeliveryFeeConfig.objects.filter(is_active=True).first()
 
-        if not (self.telephone or '').strip():
-            errors['telephone'] = 'Le telephone de livraison est obligatoire.'
+        if not config:
+            return Decimal('0.00')
 
-        if self.frais_livraison is not None and self.frais_livraison < 0:
-            errors['frais_livraison'] = 'Les frais de livraison doivent etre positifs ou nuls.'
+        fee = Decimal(distance_km) * config.price_per_km
 
-        if self.distance_km is not None and self.distance_km < 0:
-            errors['distance_km'] = 'La distance de livraison doit etre positive ou nulle.'
+        if fee < config.minimum_fee:
+            return config.minimum_fee
 
-        if self.tarif_par_km is not None and self.tarif_par_km < 0:
-            errors['tarif_par_km'] = 'Le tarif par kilometre doit etre positif ou nul.'
-
-        if self.latitude is not None and not (Decimal('-90') <= self.latitude <= Decimal('90')):
-            errors['latitude'] = 'La latitude doit etre comprise entre -90 et 90.'
-
-        if self.longitude is not None and not (Decimal('-180') <= self.longitude <= Decimal('180')):
-            errors['longitude'] = 'La longitude doit etre comprise entre -180 et 180.'
-
-        if errors:
-            raise ValidationError(errors)
+        return fee.quantize(Decimal('0.01'))
 
     def save(self, *args, **kwargs):
-        if self.reservation_id:
-            if not self.user_id:
-                self.user_id = self.reservation.user_id
+        if self.pharmacy and self.client_latitude and self.client_longitude:
+            self.distance_km = self.calculate_distance_km(
+                self.pharmacy.latitude,
+                self.pharmacy.longitude,
+                self.client_latitude,
+                self.client_longitude
+            )
+            self.delivery_fee = self.calculate_fee(self.distance_km)
 
-            if not self.pharmacy_id:
-                self.pharmacy_id = self.reservation.pharmacie_id
+        if self.status == 'livree' and self.delivered_at is None:
+            self.delivered_at = timezone.now()
 
-        if self.statut == self.STATUS_DELIVERED and self.date_livraison_reelle is None:
-            self.date_livraison_reelle = timezone.now()
-
-        self.full_clean()
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f'Livraison #{self.id} - Reservation #{self.reservation_id}'
-
-
-class DeliveryStatusHistory(models.Model):
-    delivery = models.ForeignKey(
-        Delivery,
-        on_delete=models.CASCADE,
-        related_name='status_history',
-    )
-    ancien_statut = models.CharField(
-        max_length=30,
-        choices=Delivery.STATUT_CHOICES,
-        blank=True,
-    )
-    nouveau_statut = models.CharField(
-        max_length=30,
-        choices=Delivery.STATUT_CHOICES,
-    )
-    changed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='delivery_status_changes',
-    )
-    commentaire = models.TextField(blank=True)
-    date_changement = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['-date_changement']
-        verbose_name = 'Historique statut livraison'
-        verbose_name_plural = 'Historiques statuts livraison'
-
-    def clean(self):
-        if self.ancien_statut and self.ancien_statut == self.nouveau_statut:
-            raise ValidationError({
-                'nouveau_statut': 'Le nouveau statut doit etre different de l ancien statut.'
-            })
-
-    def __str__(self):
-        return (
-            f'Livraison #{self.delivery_id}: '
-            f'{self.ancien_statut or "-"} -> {self.nouveau_statut}'
-        )
+        return f"Livraison #{self.id} - {self.status}"

@@ -1,5 +1,6 @@
 from decimal import Decimal, ROUND_HALF_UP
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
@@ -8,7 +9,9 @@ from payments.models import Payment
 from .models import Transaction
 
 
-COMMISSION_RATE = Decimal('0.05')
+COMMISSION_RATE = Decimal(
+    str(getattr(settings, 'MANUAL_PAYMENT_COMMISSION_RATE', '0.00'))
+)
 
 
 def calculate_commission(montant_brut):

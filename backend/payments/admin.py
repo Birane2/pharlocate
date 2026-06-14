@@ -1,14 +1,34 @@
 from django.contrib import admin
 
-from .models import Payment, PaymentMethod, PharmacyPaymentMethod
+from .models import Payment, PharmacyPaymentMethod
 
 
-@admin.register(PaymentMethod)
-class PaymentMethodAdmin(admin.ModelAdmin):
-    list_display = ('nom', 'code', 'est_actif', 'date_creation')
-    list_filter = ('est_actif', 'date_creation')
-    search_fields = ('nom', 'code', 'numero_compte')
-    readonly_fields = ('date_creation',)
+@admin.register(PharmacyPaymentMethod)
+class PharmacyPaymentMethodAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'pharmacy',
+        'beneficiary_name',
+        'bankily_number',
+        'masrivi_number',
+        'click_number',
+        'sedad_number',
+        'bci_pay_number',
+        'is_active',
+        'created_at',
+        'updated_at',
+    )
+    list_filter = ('is_active', 'created_at')
+    search_fields = (
+        'pharmacy__nom',
+        'beneficiary_name',
+        'bankily_number',
+        'masrivi_number',
+        'click_number',
+        'sedad_number',
+        'bci_pay_number',
+    )
+    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(Payment)
@@ -16,57 +36,22 @@ class PaymentAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'reservation',
+        'pharmacy',
         'user',
-        'pharmacy',
-        'payment_method',
-        'montant_total',
-        'statut',
-        'reference_paiement',
-        'valide_par',
-        'date_creation',
-        'date_validation',
+        'method',
+        'amount',
+        'status',
+        'transaction_id',
+        'verified_by',
+        'verified_at',
+        'created_at',
     )
-    list_filter = ('statut', 'payment_method', 'pharmacy', 'date_creation')
+    list_filter = ('status', 'method', 'created_at', 'verified_at')
     search_fields = (
-        'reference_paiement',
-        'user__username',
-        'user__first_name',
-        'user__last_name',
-        'user__email',
+        'transaction_id',
+        'client_phone',
         'user__phone_number',
+        'user__email',
         'pharmacy__nom',
     )
-    readonly_fields = (
-        'montant_medicaments',
-        'frais_livraison',
-        'montant_total',
-        'date_creation',
-        'date_paiement',
-        'date_validation',
-    )
-    autocomplete_fields = ('reservation', 'user', 'pharmacy', 'payment_method', 'valide_par')
-
-
-@admin.register(PharmacyPaymentMethod)
-class PharmacyPaymentMethodAdmin(admin.ModelAdmin):
-    list_display = (
-        'pharmacy',
-        'is_active',
-        'bankily_number',
-        'masrivi_number',
-        'click_number',
-        'sedad_number',
-        'bci_pay_number',
-        'date_modification',
-    )
-    list_filter = ('is_active', 'date_modification')
-    search_fields = (
-        'pharmacy__nom',
-        'bankily_number',
-        'masrivi_number',
-        'click_number',
-        'sedad_number',
-        'bci_pay_number',
-    )
-    readonly_fields = ('date_creation', 'date_modification')
-    autocomplete_fields = ('pharmacy',)
+    readonly_fields = ('created_at', 'updated_at', 'verified_at')

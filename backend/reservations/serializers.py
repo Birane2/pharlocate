@@ -1,313 +1,141 @@
-from django.db import transaction
 from rest_framework import serializers
 
 from medicaments.models import Stock
-from deliveries.serializers import DeliverySerializer
-from deliveries.services import create_delivery_for_reservation
-from payments.models import PaymentMethod
-from payments.serializers import PaymentSerializer
-from payments.services import create_payment_for_reservation
-from pharmacies.models import Pharmacy
-
 from .models import Reservation, ReservationItem
+from .services import calculate_reservation_amount
+
+
+class ReservationItemCreateSerializer(serializers.Serializer):
+    stock = serializers.IntegerField()
+    quantite = serializers.IntegerField(min_value=1)
 
 
 class ReservationItemSerializer(serializers.ModelSerializer):
-    medicament_nom = serializers.CharField(source='medicament.nom', read_only=True)
-    sous_total = serializers.SerializerMethodField()
+    medicament_nom = serializers.CharField(
+        source='stock.medicament.nom',
+        read_only=True
+    )
+
+    pharmacie_nom = serializers.CharField(
+        source='stock.pharmacie.nom',
+        read_only=True
+    )
 
     class Meta:
         model = ReservationItem
         fields = [
             'id',
-            'medicament',
+            'stock',
             'medicament_nom',
+            'pharmacie_nom',
             'quantite',
             'prix_unitaire',
             'sous_total',
+            'created_at',
         ]
-        read_only_fields = ['medicament_nom', 'prix_unitaire', 'sous_total']
-        extra_kwargs = {
-            'quantite': {'min_value': 1},
-        }
-
-    def get_sous_total(self, obj):
-        return obj.quantite * obj.prix_unitaire
 
 
 class ReservationSerializer(serializers.ModelSerializer):
-    items = ReservationItemSerializer(many=True)
-    user_username = serializers.CharField(source='user.username', read_only=True)
-    pharmacie_nom = serializers.CharField(source='pharmacie.nom', read_only=True)
-    total = serializers.SerializerMethodField()
+    items = ReservationItemSerializer(many=True, read_only=True)
+
+    items_data = ReservationItemCreateSerializer(
+        many=True,
+        write_only=True,
+        required=True
+    )
+
+    pharmacie_nom = serializers.CharField(
+        source='pharmacie.nom',
+        read_only=True
+    )
+
+    user_name = serializers.CharField(
+        source='user.get_full_name',
+        read_only=True
+    )
 
     class Meta:
         model = Reservation
         fields = [
             'id',
             'user',
-            'user_username',
+            'user_name',
             'pharmacie',
             'pharmacie_nom',
-            'date_reservation',
-            'date_modification',
+            'items',
+            'items_data',
+            'type_reservation',
             'statut',
-            'mode_retrait',
-            'statut_paiement',
             'montant_medicaments',
             'frais_livraison',
             'montant_total',
-            'items',
-            'total',
+            'date_creation',
+            'date_modification',
         ]
+
         read_only_fields = [
             'id',
             'user',
-            'date_reservation',
-            'date_modification',
+            'user_name',
             'statut',
-            'statut_paiement',
             'montant_medicaments',
             'frais_livraison',
             'montant_total',
-            'total',
+            'date_creation',
+            'date_modification',
         ]
 
-    def get_total(self, obj):
-        return obj.montant_total
-
-    def validate_pharmacie(self, value):
-        if not Pharmacy.objects.filter(
-            pk=value.pk,
-            est_valide=True,
-            statut_validation='validee',
-        ).exists():
+    def validate_items_data(self, value):
+        if not value:
             raise serializers.ValidationError(
-                "Cette pharmacie n'est pas disponible pour une reservation publique."
+                'La réservation doit contenir au moins un médicament.'
             )
 
         return value
 
     def validate(self, attrs):
         pharmacie = attrs.get('pharmacie')
-        items = attrs.get('items') or []
-        mode_retrait = attrs.get('mode_retrait', 'retrait')
+        items_data = attrs.get('items_data', [])
 
-        if not items:
-            raise serializers.ValidationError(
-                {'items': 'Ajoutez au moins un medicament au panier avant de reserver.'}
-            )
-
-        if mode_retrait not in dict(Reservation.MODE_RETRAIT_CHOICES):
-            raise serializers.ValidationError(
-                {'mode_retrait': 'Mode de retrait invalide.'}
-            )
-
-        seen_medicaments = set()
-
-        for item in items:
-            medicament = item['medicament']
-            quantite = item['quantite']
-
-            if medicament.pk in seen_medicaments:
-                raise serializers.ValidationError(
-                    {'items': 'Chaque medicament ne peut apparaitre qu une seule fois dans la reservation.'}
-                )
-
-            seen_medicaments.add(medicament.pk)
-
+        for item in items_data:
             try:
-                stock = Stock.objects.select_related('medicament').get(
-                    pharmacie=pharmacie,
-                    medicament=medicament,
-                )
+                stock = Stock.objects.get(id=item['stock'])
             except Stock.DoesNotExist:
-                raise serializers.ValidationError(
-                    {'items': f"{medicament.nom} n'est pas disponible dans cette pharmacie."}
-                )
+                raise serializers.ValidationError({
+                    'items_data': f"Stock introuvable : {item['stock']}"
+                })
 
-            if stock.quantite <= 0:
-                raise serializers.ValidationError(
-                    {'items': f"{medicament.nom} est actuellement en rupture de stock."}
-                )
+            if stock.pharmacie != pharmacie:
+                raise serializers.ValidationError({
+                    'items_data': "Tous les médicaments doivent appartenir à la même pharmacie."
+                })
 
-            if quantite > stock.quantite:
-                raise serializers.ValidationError(
-                    {
-                        'items': (
-                            f"Quantite indisponible pour {medicament.nom}. "
-                            f"Disponible: {stock.quantite}."
-                        )
-                    }
-                )
+            if item['quantite'] > stock.quantite:
+                raise serializers.ValidationError({
+                    'items_data': f"Stock insuffisant pour {stock.medicament.nom}."
+                })
 
         return attrs
 
-    @transaction.atomic
     def create(self, validated_data):
-        items_data = validated_data.pop('items')
-        reservation = Reservation.objects.create(**validated_data)
+        items_data = validated_data.pop('items_data')
+        user = self.context['request'].user
 
-        for item_data in items_data:
-            stock = Stock.objects.get(
-                pharmacie=reservation.pharmacie,
-                medicament=item_data['medicament'],
-            )
+        reservation = Reservation.objects.create(
+            user=user,
+            statut='en_attente',
+            **validated_data
+        )
+
+        for item in items_data:
+            stock = Stock.objects.get(id=item['stock'])
+
             ReservationItem.objects.create(
                 reservation=reservation,
-                medicament=item_data['medicament'],
-                quantite=item_data['quantite'],
-                prix_unitaire=stock.prix,
+                stock=stock,
+                quantite=item['quantite']
             )
 
-        reservation.calculate_amounts()
+        calculate_reservation_amount(reservation)
+
         return reservation
-
-
-class ReservationCheckoutSerializer(serializers.Serializer):
-    pharmacie = serializers.PrimaryKeyRelatedField(
-        queryset=Pharmacy.objects.filter(est_valide=True, statut_validation='validee')
-    )
-    mode_retrait = serializers.ChoiceField(
-        choices=Reservation.MODE_RETRAIT_CHOICES,
-        default='retrait',
-    )
-    items = ReservationItemSerializer(many=True)
-    delivery = serializers.DictField(required=False)
-    payment_method = serializers.PrimaryKeyRelatedField(
-        queryset=PaymentMethod.objects.filter(est_actif=True)
-    )
-    reference_paiement = serializers.CharField(required=False, allow_blank=True)
-    capture_paiement = serializers.ImageField(required=False, allow_null=True)
-
-    def validate(self, attrs):
-        request = self.context.get('request')
-        user = getattr(request, 'user', None)
-        mode_retrait = attrs['mode_retrait']
-        payment_method = attrs['payment_method']
-        delivery_data = attrs.get('delivery') or {}
-        reference = attrs.get('reference_paiement', '')
-        capture = attrs.get('capture_paiement')
-
-        if not user or not user.is_authenticated:
-            raise serializers.ValidationError(
-                {'detail': 'Vous devez etre connecte pour finaliser la reservation.'}
-            )
-
-        reservation_serializer = ReservationSerializer(
-            data={
-                'pharmacie': attrs['pharmacie'].pk,
-                'mode_retrait': mode_retrait,
-                'items': self.initial_data.get('items', []),
-            },
-            context=self.context,
-        )
-        reservation_serializer.is_valid(raise_exception=True)
-        attrs['_reservation_serializer'] = reservation_serializer
-
-        if mode_retrait == 'livraison':
-            if not delivery_data:
-                raise serializers.ValidationError(
-                    {'delivery': 'Les informations de livraison sont obligatoires.'}
-                )
-
-            if not str(delivery_data.get('adresse_livraison', '')).strip():
-                raise serializers.ValidationError(
-                    {'delivery': {"adresse_livraison": "L'adresse de livraison est obligatoire."}}
-                )
-
-            if not str(delivery_data.get('telephone', '')).strip():
-                raise serializers.ValidationError(
-                    {'delivery': {'telephone': 'Le telephone de livraison est obligatoire.'}}
-                )
-
-        if mode_retrait == 'retrait' and delivery_data:
-            raise serializers.ValidationError(
-                {'delivery': 'Aucune livraison ne doit etre envoyee pour un retrait.'}
-            )
-
-        if payment_method.code == PaymentMethod.CODE_PHARMACY and mode_retrait != 'retrait':
-            raise serializers.ValidationError(
-                {'payment_method': 'Le paiement a la pharmacie est reserve au retrait.'}
-            )
-
-        if payment_method.code == PaymentMethod.CODE_DELIVERY and mode_retrait != 'livraison':
-            raise serializers.ValidationError(
-                {'payment_method': 'Le paiement a la livraison est reserve a la livraison.'}
-            )
-
-        if payment_method.requires_proof:
-            config = getattr(attrs['pharmacie'], 'payment_methods_config', None)
-            account_number = config.get_account_number(payment_method.code) if config else ''
-
-            if not config or not config.is_active or not account_number:
-                raise serializers.ValidationError(
-                    {
-                        'payment_method': (
-                            'Cette methode de paiement n est pas configuree '
-                            'pour cette pharmacie.'
-                        )
-                    }
-                )
-
-            if not (reference or capture):
-                raise serializers.ValidationError(
-                    {
-                        'reference_paiement': (
-                            'Une reference ou une capture de paiement est obligatoire.'
-                        )
-                    }
-                )
-
-        return attrs
-
-    @transaction.atomic
-    def create(self, validated_data):
-        request = self.context['request']
-        reservation_serializer = validated_data['_reservation_serializer']
-        delivery_data = validated_data.get('delivery') or {}
-
-        reservation = reservation_serializer.save(user=request.user)
-        delivery = None
-
-        if reservation.mode_retrait == 'livraison':
-            delivery = create_delivery_for_reservation(
-                reservation=reservation,
-                adresse_livraison=delivery_data['adresse_livraison'],
-                telephone=delivery_data['telephone'],
-                latitude=delivery_data.get('latitude'),
-                longitude=delivery_data.get('longitude'),
-                note=delivery_data.get('note', ''),
-            )
-
-        payment = create_payment_for_reservation(
-            reservation=reservation,
-            payment_method=validated_data['payment_method'],
-            reference_paiement=validated_data.get('reference_paiement', ''),
-            capture_paiement=validated_data.get('capture_paiement'),
-        )
-
-        return {
-            'reservation': reservation,
-            'delivery': delivery,
-            'payment': payment,
-        }
-
-    def to_representation(self, instance):
-        request = self.context.get('request')
-
-        return {
-            'reservation': ReservationSerializer(
-                instance['reservation'],
-                context=self.context,
-            ).data,
-            'delivery': (
-                DeliverySerializer(instance['delivery'], context=self.context).data
-                if instance.get('delivery')
-                else None
-            ),
-            'payment': PaymentSerializer(
-                instance['payment'],
-                context={'request': request},
-            ).data,
-        }

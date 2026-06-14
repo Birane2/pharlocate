@@ -1,299 +1,92 @@
-from django.db import transaction
-from django.db.models import Q
-from rest_framework import generics, parsers, status, viewsets
-from rest_framework.decorators import action
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework import generics, status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
-from config.permissions import (
-    IsAuthenticatedWithTokenMessage,
-    IsPharmacien,
-    IsUtilisateur,
-)
-from medicaments.models import Stock
-from notifications_app.models import Notification
 from .models import Reservation
-from .serializers import ReservationCheckoutSerializer, ReservationSerializer
+from .serializers import ReservationSerializer
 
 
 class ReservationListCreateView(generics.ListCreateAPIView):
-    queryset = Reservation.objects.all().prefetch_related('items__medicament')
     serializer_class = ReservationSerializer
+    permission_classes = [IsAuthenticated]
 
-    def get_permissions(self):
-        if self.request.method == 'POST':
-            return [IsAuthenticated()]
-        return [AllowAny()]
+    def get_queryset(self):
+        user = self.request.user
 
-    def create(self, request, *args, **kwargs):
-        if request.user.role != 'utilisateur':
-            return Response(
-                {'error': 'Seuls les utilisateurs peuvent creer une reservation.'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        if user.role == 'admin':
+            return Reservation.objects.all().order_by('-date_creation')
 
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(user=request.user)
+        if user.role == 'pharmacien':
+            return Reservation.objects.filter(
+                pharmacie__pharmacien=user
+            ).order_by('-date_creation')
 
-        reservation = serializer.instance
-        Notification.objects.create(
-            user=request.user,
-            message=f"Votre reservation #{reservation.id} a ete creee avec succes.",
-            type='confirmation'
-        )
-
-        return Response(
-            {
-                'message': 'Reservation creee avec succes.',
-                'data': serializer.data
-            },
-            status=status.HTTP_201_CREATED
-        )
+        return Reservation.objects.filter(
+            user=user
+        ).order_by('-date_creation')
 
 
 class ReservationDetailView(generics.RetrieveAPIView):
-    queryset = Reservation.objects.all().prefetch_related('items__medicament')
     serializer_class = ReservationSerializer
-    permission_classes = [AllowAny]
-
-
-class ReservationCheckoutView(APIView):
-    permission_classes = [IsAuthenticatedWithTokenMessage, IsUtilisateur]
-    parser_classes = [parsers.JSONParser, parsers.MultiPartParser, parsers.FormParser]
-
-    def post(self, request):
-        serializer = ReservationCheckoutSerializer(
-            data=request.data,
-            context={'request': request},
-        )
-        serializer.is_valid(raise_exception=True)
-        checkout = serializer.save()
-
-        reservation = checkout['reservation']
-        Notification.objects.create(
-            user=request.user,
-            message=f"Votre reservation #{reservation.id} a ete creee avec succes.",
-            type='confirmation',
-        )
-
-        return Response(
-            {
-                'message': 'Reservation finalisee avec succes.',
-                'data': serializer.to_representation(checkout),
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
-
-class PharmacienReservationPagination(PageNumberPagination):
-    page_size = 5
-    page_size_query_param = 'page_size'
-    max_page_size = 50
-
-
-class UserReservationPagination(PageNumberPagination):
-    page_size = 5
-    page_size_query_param = "page_size"
-    max_page_size = 20
-
-
-class UserReservationListView(generics.ListAPIView):
-    serializer_class = ReservationSerializer
-    permission_classes = [IsAuthenticatedWithTokenMessage, IsUtilisateur]
-    pagination_class = UserReservationPagination
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        queryset = (
-            Reservation.objects.filter(user=self.request.user)
-            .select_related("pharmacie")
-            .prefetch_related("items__medicament")
-            .order_by("-date_reservation")
-        )
+        user = self.request.user
 
-        statut = self.request.query_params.get("statut")
-        search = self.request.query_params.get("search")
+        if user.role == 'admin':
+            return Reservation.objects.all()
 
-        if statut:
-            queryset = queryset.filter(statut=statut)
-
-        if search:
-            queryset = queryset.filter(
-                Q(pharmacie__nom__icontains=search)
-                | Q(items__medicament__nom__icontains=search)
-            ).distinct()
-
-        return queryset
-
-
-class PharmacienReservationViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = ReservationSerializer
-    permission_classes = [IsAuthenticatedWithTokenMessage, IsPharmacien]
-    pagination_class = PharmacienReservationPagination
-
-    def get_queryset(self):
-        queryset = (
-            Reservation.objects.filter(pharmacie__user=self.request.user)
-            .select_related('user', 'pharmacie')
-            .prefetch_related('items__medicament')
-            .order_by('-date_reservation')
-        )
-        statut = self.request.query_params.get('statut')
-        search = self.request.query_params.get('search')
-
-        if statut:
-            queryset = queryset.filter(statut=statut)
-
-        if search:
-            queryset = queryset.filter(
-                Q(user__username__icontains=search)
-                | Q(user__email__icontains=search)
-                | Q(items__medicament__nom__icontains=search)
-            ).distinct()
-
-        return queryset
-
-    def _notify(self, reservation, message):
-        Notification.objects.create(
-            user=reservation.user,
-            message=message,
-            type='info',
-        )
-
-    def _reservation_response(self, reservation, message):
-        return Response(
-            {
-                'message': message,
-                'reservation': self.get_serializer(reservation).data,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-    @transaction.atomic
-    def _confirm_reservation(self, reservation):
-        if reservation.statut != 'en_attente':
-            return Response(
-                {'error': 'Seule une reservation en attente peut etre confirmee.'},
-                status=status.HTTP_400_BAD_REQUEST,
+        if user.role == 'pharmacien':
+            return Reservation.objects.filter(
+                pharmacie__pharmacien=user
             )
 
-        for item in reservation.items.select_related('medicament'):
-            try:
-                stock = Stock.objects.select_for_update().get(
-                    pharmacie=reservation.pharmacie,
-                    medicament=item.medicament,
-                )
-            except Stock.DoesNotExist:
-                return Response(
-                    {'error': f"Stock introuvable pour {item.medicament.nom}."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        return Reservation.objects.filter(user=user)
 
-            if stock.quantite < item.quantite:
-                return Response(
-                    {
-                        'error': (
-                            f"Stock insuffisant pour {item.medicament.nom}. "
-                            f"Disponible: {stock.quantite}, demande: {item.quantite}."
-                        )
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
 
-        for item in reservation.items.select_related('medicament'):
-            stock = Stock.objects.select_for_update().get(
-                pharmacie=reservation.pharmacie,
-                medicament=item.medicament,
-            )
-            stock.quantite -= item.quantite
-            stock.save(update_fields=['quantite', 'date_modification'])
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def cancel_reservation(request, pk):
+    try:
+        reservation = Reservation.objects.get(pk=pk)
+    except Reservation.DoesNotExist:
+        return Response({
+            'error': 'Réservation introuvable.'
+        }, status=status.HTTP_404_NOT_FOUND)
 
-        reservation.statut = 'confirmee'
-        reservation.save(update_fields=['statut', 'date_modification'])
-        Notification.objects.create(
-            user=reservation.user,
-            message=f"Votre reservation #{reservation.id} a ete confirmee.",
-            type='confirmation',
-        )
-        return self._reservation_response(
-            reservation,
-            'Reservation confirmee avec succes.',
-        )
+    if reservation.user != request.user:
+        return Response({
+            'error': "Vous ne pouvez annuler que vos propres réservations."
+        }, status=status.HTTP_403_FORBIDDEN)
 
-    @transaction.atomic
-    def _cancel_reservation(self, reservation):
-        if reservation.statut in ['annulee', 'recuperee']:
-            return Response(
-                {'error': 'Cette reservation ne peut plus etre modifiee.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+    if reservation.statut != 'en_attente':
+        return Response({
+            'error': "Cette réservation ne peut plus être annulée."
+        }, status=status.HTTP_400_BAD_REQUEST)
 
-        if reservation.statut in ['confirmee', 'prete']:
-            for item in reservation.items.select_related('medicament'):
-                stock, _ = Stock.objects.select_for_update().get_or_create(
-                    pharmacie=reservation.pharmacie,
-                    medicament=item.medicament,
-                    defaults={'quantite': 0, 'prix': item.prix_unitaire or 0},
-                )
-                stock.quantite += item.quantite
-                stock.save(update_fields=['quantite', 'date_modification'])
+    if hasattr(reservation, 'payment'):
+        payment = reservation.payment
 
-        reservation.statut = 'annulee'
-        reservation.save(update_fields=['statut', 'date_modification'])
-        self._notify(
-            reservation,
-            f"Votre reservation #{reservation.id} a ete annulee.",
-        )
-        return self._reservation_response(
-            reservation,
-            'Reservation annulee avec succes.',
-        )
+        if payment.status != 'en_attente_verification':
+            return Response({
+                'error': "Le paiement est déjà validé ou traité. Vous ne pouvez plus annuler directement."
+            }, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=True, methods=['patch'])
-    def confirm(self, request, pk=None):
-        return self._confirm_reservation(self.get_object())
+        payment.status = 'annule'
+        payment.save()
 
-    @action(detail=True, methods=['patch'])
-    def cancel(self, request, pk=None):
-        return self._cancel_reservation(self.get_object())
+    if hasattr(reservation, 'delivery'):
+        delivery = reservation.delivery
+        delivery.status = 'annulee'
+        delivery.save()
 
-    @action(detail=True, methods=['patch'])
-    def ready(self, request, pk=None):
-        reservation = self.get_object()
+    reservation.statut = 'annulee'
+    reservation.save()
 
-        if reservation.statut != 'confirmee':
-            return Response(
-                {'error': 'Seule une reservation confirmee peut devenir prete.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+    serializer = ReservationSerializer(reservation, context={'request': request})
 
-        reservation.statut = 'prete'
-        reservation.save(update_fields=['statut', 'date_modification'])
-        self._notify(reservation, f"Votre reservation #{reservation.id} est prete.")
-        return self._reservation_response(
-            reservation,
-            'Reservation marquee comme prete.',
-        )
-
-    @action(detail=True, methods=['patch'], url_path='picked-up')
-    def picked_up(self, request, pk=None):
-        reservation = self.get_object()
-
-        if reservation.statut != 'prete':
-            return Response(
-                {'error': 'Seule une reservation prete peut etre recuperee.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        reservation.statut = 'recuperee'
-        reservation.save(update_fields=['statut', 'date_modification'])
-        self._notify(
-            reservation,
-            f"Votre reservation #{reservation.id} a ete recuperee.",
-        )
-        return self._reservation_response(
-            reservation,
-            'Reservation marquee comme recuperee.',
-        )
+    return Response({
+        'message': 'Réservation annulée avec succès.',
+        'data': serializer.data
+    }, status=status.HTTP_200_OK)

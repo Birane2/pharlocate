@@ -1,230 +1,146 @@
-from decimal import Decimal
-
-from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
 from pharmacies.models import Pharmacy
-from reservations.models import Reservation
-
-
-class PaymentMethod(models.Model):
-    CODE_BANKILY = 'bankily'
-    CODE_MASRVI = 'masrvi'
-    CODE_CLICK = 'click'
-    CODE_SEDAD = 'sedad'
-    CODE_BCI_PAY = 'bci_pay'
-    CODE_PHARMACY = 'paiement_pharmacie'
-    CODE_DELIVERY = 'paiement_livraison'
-
-    MANUAL_PROOF_CODES = {
-        CODE_BANKILY,
-        CODE_MASRVI,
-        CODE_CLICK,
-        CODE_SEDAD,
-        CODE_BCI_PAY,
-    }
-
-    nom = models.CharField(max_length=100)
-    code = models.SlugField(max_length=50, unique=True)
-    description = models.TextField(blank=True)
-    numero_compte = models.CharField(max_length=100, blank=True)
-    instructions = models.TextField(blank=True)
-    est_actif = models.BooleanField(default=True)
-    date_creation = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ['nom']
-        verbose_name = 'Methode de paiement'
-        verbose_name_plural = 'Methodes de paiement'
-
-    @property
-    def requires_proof(self):
-        return self.code in self.MANUAL_PROOF_CODES
-
-    def __str__(self):
-        return self.nom
 
 
 class PharmacyPaymentMethod(models.Model):
     pharmacy = models.OneToOneField(
         Pharmacy,
         on_delete=models.CASCADE,
-        related_name='payment_methods_config',
+        related_name='payment_methods'
     )
-    bankily_number = models.CharField(max_length=50, blank=True)
-    masrivi_number = models.CharField(max_length=50, blank=True)
-    click_number = models.CharField(max_length=50, blank=True)
-    sedad_number = models.CharField(max_length=50, blank=True)
-    bci_pay_number = models.CharField(max_length=50, blank=True)
+
+    beneficiary_name = models.CharField(max_length=150)
+
+    bankily_number = models.CharField(max_length=30, blank=True, null=True)
+    masrivi_number = models.CharField(max_length=30, blank=True, null=True)
+    click_number = models.CharField(max_length=30, blank=True, null=True)
+    sedad_number = models.CharField(max_length=30, blank=True, null=True)
+    bci_pay_number = models.CharField(max_length=30, blank=True, null=True)
+
     is_active = models.BooleanField(default=True)
-    date_creation = models.DateTimeField(auto_now_add=True)
-    date_modification = models.DateTimeField(auto_now=True)
 
-    class Meta:
-        verbose_name = 'Configuration paiement pharmacie'
-        verbose_name_plural = 'Configurations paiement pharmacies'
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-    def get_account_number(self, code):
-        mapping = {
-            PaymentMethod.CODE_BANKILY: self.bankily_number,
-            PaymentMethod.CODE_MASRVI: self.masrivi_number,
-            PaymentMethod.CODE_CLICK: self.click_number,
-            PaymentMethod.CODE_SEDAD: self.sedad_number,
-            PaymentMethod.CODE_BCI_PAY: self.bci_pay_number,
-        }
-        return mapping.get(code, '')
+    def has_any_method(self):
+        return any([
+            self.bankily_number,
+            self.masrivi_number,
+            self.click_number,
+            self.sedad_number,
+            self.bci_pay_number,
+        ])
 
     def __str__(self):
-        return f'Methodes paiement - {self.pharmacy.nom}'
+        return f"Méthodes paiement - {self.pharmacy.nom}"
 
 
 class Payment(models.Model):
-    STATUS_UNPAID = 'non_paye'
-    STATUS_PENDING = 'en_attente_validation'
-    STATUS_VALIDATED = 'valide'
-    STATUS_REJECTED = 'refuse'
-    STATUS_CANCELLED = 'annule'
-    STATUS_REFUNDED = 'rembourse'
+    PAYMENT_METHOD_CHOICES = (
+        ('bankily', 'Bankily'),
+        ('masrivi', 'Masrivi'),
+        ('click', 'Click'),
+        ('sedad', 'Sedad'),
+        ('bci_pay', 'BCI Pay'),
+        ('cash_pharmacy', 'Paiement à la pharmacie'),
+        ('cash_delivery', 'Paiement à la livraison'),
+    )
 
-    STATUT_CHOICES = [
-        (STATUS_UNPAID, 'Non paye'),
-        (STATUS_PENDING, 'En attente de validation'),
-        (STATUS_VALIDATED, 'Valide'),
-        (STATUS_REJECTED, 'Refuse'),
-        (STATUS_CANCELLED, 'Annule'),
-        (STATUS_REFUNDED, 'Rembourse'),
-    ]
+    PAYMENT_STATUS_CHOICES = (
+        ('en_attente_verification', 'En attente de vérification'),
+        ('valide', 'Validé'),
+        ('refuse', 'Refusé'),
+        ('rembourse', 'Remboursé'),
+        ('annule', 'Annulé'),
+    )
 
     reservation = models.OneToOneField(
-        Reservation,
+        'reservations.Reservation',
         on_delete=models.CASCADE,
-        related_name='payment',
+        related_name='payment'
     )
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='payments',
-    )
+
     pharmacy = models.ForeignKey(
         Pharmacy,
         on_delete=models.CASCADE,
-        related_name='payments',
+        related_name='payments'
     )
-    payment_method = models.ForeignKey(
-        PaymentMethod,
-        on_delete=models.PROTECT,
-        related_name='payments',
+
+    user = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.CASCADE,
+        related_name='payments'
     )
-    montant_medicaments = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=Decimal('0.00'),
+
+    method = models.CharField(
+        max_length=30,
+        choices=PAYMENT_METHOD_CHOICES
     )
-    frais_livraison = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=Decimal('0.00'),
+
+    client_phone = models.CharField(max_length=30)
+
+    transaction_id = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True
     )
-    montant_total = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        default=Decimal('0.00'),
-    )
-    reference_paiement = models.CharField(max_length=150, blank=True)
-    capture_paiement = models.ImageField(
+
+    payment_proof = models.ImageField(
         upload_to='payments/proofs/',
         blank=True,
-        null=True,
+        null=True
     )
-    statut = models.CharField(
-        max_length=30,
-        choices=STATUT_CHOICES,
-        default=STATUS_PENDING,
-        db_index=True,
+
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0
     )
-    valide_par = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+
+    status = models.CharField(
+        max_length=40,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='en_attente_verification'
+    )
+
+    verified_by = models.ForeignKey(
+        'accounts.User',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='validated_payments',
+        related_name='verified_payments'
     )
-    date_paiement = models.DateTimeField(null=True, blank=True)
-    date_validation = models.DateTimeField(null=True, blank=True)
-    motif_refus = models.TextField(blank=True)
-    date_creation = models.DateTimeField(auto_now_add=True)
 
-    class Meta:
-        ordering = ['-date_creation']
-        indexes = [
-            models.Index(fields=['statut', 'date_creation']),
-            models.Index(fields=['pharmacy', 'statut']),
-            models.Index(fields=['user', 'statut']),
-        ]
-        verbose_name = 'Paiement'
-        verbose_name_plural = 'Paiements'
+    verified_at = models.DateTimeField(null=True, blank=True)
 
-    @property
-    def has_proof(self):
-        return bool(self.reference_paiement or self.capture_paiement)
+    rejection_reason = models.TextField(blank=True, null=True)
 
-    def recalculate_amounts(self):
-        self.reservation.calculate_amounts(save=True)
-        self.montant_medicaments = self.reservation.montant_medicaments
-        self.frais_livraison = self.reservation.frais_livraison
-        self.montant_total = self.montant_medicaments + self.frais_livraison
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-    def clean(self):
-        errors = {}
+    def validate_payment(self, user):
+        self.status = 'valide'
+        self.verified_by = user
+        self.verified_at = timezone.now()
+        self.rejection_reason = None
+        self.save()
 
-        if self.reservation_id:
-            if self.user_id and self.user_id != self.reservation.user_id:
-                errors['user'] = "L'utilisateur doit correspondre a la reservation."
+    def reject_payment(self, user, reason=''):
+        self.status = 'refuse'
+        self.verified_by = user
+        self.verified_at = timezone.now()
+        self.rejection_reason = reason
+        self.save()
 
-            if self.pharmacy_id and self.pharmacy_id != self.reservation.pharmacie_id:
-                errors['pharmacy'] = 'La pharmacie doit correspondre a la reservation.'
+    def cancel_payment(self):
+        self.status = 'annule'
+        self.save()
 
-        if self.payment_method_id and self.payment_method.requires_proof and not self.has_proof:
-            errors['reference_paiement'] = (
-                'Une reference ou une capture est obligatoire pour ce mode de paiement.'
-            )
-
-        if self.statut == self.STATUS_REJECTED and not (self.motif_refus or '').strip():
-            errors['motif_refus'] = 'Le motif de refus est obligatoire.'
-
-        if self.montant_medicaments < 0:
-            errors['montant_medicaments'] = 'Le montant des medicaments ne peut pas etre negatif.'
-
-        if self.frais_livraison < 0:
-            errors['frais_livraison'] = 'Les frais de livraison ne peuvent pas etre negatifs.'
-
-        if self.montant_total != self.montant_medicaments + self.frais_livraison:
-            errors['montant_total'] = 'Le montant total doit etre recalcule cote backend.'
-
-        if errors:
-            raise ValidationError(errors)
-
-    def save(self, *args, **kwargs):
-        if self.reservation_id:
-            if not self.user_id:
-                self.user_id = self.reservation.user_id
-
-            if not self.pharmacy_id:
-                self.pharmacy_id = self.reservation.pharmacie_id
-
-            self.recalculate_amounts()
-
-        if self.has_proof and self.date_paiement is None:
-            self.date_paiement = timezone.now()
-
-        if self.statut in {self.STATUS_VALIDATED, self.STATUS_REJECTED}:
-            if self.date_validation is None:
-                self.date_validation = timezone.now()
-
-        self.full_clean()
-        super().save(*args, **kwargs)
+    def refund_payment(self):
+        self.status = 'rembourse'
+        self.save()
 
     def __str__(self):
-        return f'Paiement #{self.id} - Reservation #{self.reservation_id}'
+        return f"Paiement #{self.id} - {self.method} - {self.status}"
