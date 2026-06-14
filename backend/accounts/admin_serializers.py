@@ -15,9 +15,13 @@ class AdminUserListSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id',
-            'username',
+            'phone_number',
+            'first_name',
+            'last_name',
             'email',
             'role',
+            'is_email_verified',
+            'is_phone_verified',
             'statut',
             'nom_complet',
             'date_creation',
@@ -30,7 +34,7 @@ class AdminUserListSerializer(serializers.ModelSerializer):
 
     def get_nom_complet(self, obj):
         full_name = f'{obj.first_name} {obj.last_name}'.strip()
-        return full_name or obj.username
+        return full_name or obj.phone_number or obj.username
 
     def get_has_pharmacy(self, obj):
         if obj.role != 'pharmacien':

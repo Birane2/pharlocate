@@ -1,10 +1,11 @@
 from django.db import transaction
 from django.db.models import Q
-from rest_framework import generics, status, viewsets
+from rest_framework import generics, parsers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from config.permissions import (
     IsAuthenticatedWithTokenMessage,
@@ -14,7 +15,7 @@ from config.permissions import (
 from medicaments.models import Stock
 from notifications_app.models import Notification
 from .models import Reservation
-from .serializers import ReservationSerializer
+from .serializers import ReservationCheckoutSerializer, ReservationSerializer
 
 
 class ReservationListCreateView(generics.ListCreateAPIView):
@@ -57,6 +58,34 @@ class ReservationDetailView(generics.RetrieveAPIView):
     queryset = Reservation.objects.all().prefetch_related('items__medicament')
     serializer_class = ReservationSerializer
     permission_classes = [AllowAny]
+
+
+class ReservationCheckoutView(APIView):
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsUtilisateur]
+    parser_classes = [parsers.JSONParser, parsers.MultiPartParser, parsers.FormParser]
+
+    def post(self, request):
+        serializer = ReservationCheckoutSerializer(
+            data=request.data,
+            context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        checkout = serializer.save()
+
+        reservation = checkout['reservation']
+        Notification.objects.create(
+            user=request.user,
+            message=f"Votre reservation #{reservation.id} a ete creee avec succes.",
+            type='confirmation',
+        )
+
+        return Response(
+            {
+                'message': 'Reservation finalisee avec succes.',
+                'data': serializer.to_representation(checkout),
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class PharmacienReservationPagination(PageNumberPagination):

@@ -9,9 +9,29 @@ class ReservationItemInline(admin.TabularInline):
 
 @admin.register(Reservation)
 class ReservationAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'pharmacie', 'statut', 'date_reservation')
-    list_filter = ('statut', 'date_reservation', 'pharmacie')
+    list_display = (
+        'id',
+        'user',
+        'pharmacie',
+        'statut',
+        'mode_retrait',
+        'statut_paiement',
+        'montant_total',
+        'date_reservation',
+    )
+    list_filter = (
+        'statut',
+        'mode_retrait',
+        'statut_paiement',
+        'date_reservation',
+        'pharmacie',
+    )
     search_fields = ('user__username', 'pharmacie__nom')
+    readonly_fields = (
+        'montant_medicaments',
+        'frais_livraison',
+        'montant_total',
+    )
     inlines = [ReservationItemInline]
 
 

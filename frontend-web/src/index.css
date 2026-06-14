@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap");
 @import "tailwindcss";
 
 :root {
@@ -18,7 +19,7 @@
   --pharma-dynamic-green: #2FA6A3;
   --pharma-accent-blue: #4A8BBE;
 
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: "Poppins", "Inter", system-ui, sans-serif;
   background-color: var(--pharma-bg);
   color: var(--pharma-text);
 }
@@ -49,7 +50,7 @@ body {
   min-height: 100vh;
   background-color: var(--pharma-bg);
   color: var(--pharma-text);
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: "Poppins", "Inter", system-ui, sans-serif;
   text-rendering: optimizeLegibility;
 }
 

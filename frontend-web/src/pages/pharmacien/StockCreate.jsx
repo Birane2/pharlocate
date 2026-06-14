@@ -10,6 +10,7 @@ import { pharmacistLinks } from "../../routes/dashboardLinks";
 import { createMedicament, getMedicaments } from "../../services/medicamentService";
 import { getMyPharmacyStatus } from "../../services/pharmacyService";
 import { createStock } from "../../services/stockService";
+import { getApiErrorMessage as getSharedApiErrorMessage } from "../../utils/apiError";
 
 const initialForm = {
   medicament_id: "",
@@ -23,37 +24,10 @@ const initialForm = {
 };
 
 function getApiErrorMessage(error) {
-  const data = error.response?.data;
-  const extractMessage = (value) => {
-    if (!value) {
-      return "";
-    }
-
-    if (typeof value === "string") {
-      return value;
-    }
-
-    if (Array.isArray(value)) {
-      return extractMessage(value[0]);
-    }
-
-    if (typeof value === "object") {
-      if (typeof value.message === "string") {
-        return value.message;
-      }
-
-      if (typeof value.detail === "string") {
-        return value.detail;
-      }
-
-      return extractMessage(Object.values(value)[0]);
-    }
-
-    return "";
-  };
+  const dataMessage = getSharedApiErrorMessage(error, "", "");
 
   if (error.response?.status === 400) {
-    return extractMessage(data) || "Veuillez verifier les champs du formulaire.";
+    return dataMessage || "Veuillez verifier les champs du formulaire.";
   }
 
   if (error.response?.status === 401) {
@@ -66,12 +40,18 @@ function getApiErrorMessage(error) {
 
   if (error.response?.status === 404) {
     return (
-      extractMessage(data) ||
+      dataMessage ||
       "Vous devez d abord creer votre pharmacie avant d ajouter un medicament au stock."
     );
   }
 
-  return extractMessage(data) || error.message || "Impossible d'ajouter ce medicament au stock.";
+  return (
+    getSharedApiErrorMessage(
+      error,
+      "Impossible d'ajouter ce medicament au stock.",
+      "Erreur serveur pendant l'ajout au stock. Reessayez plus tard."
+    )
+  );
 }
 
 function StockCreate() {

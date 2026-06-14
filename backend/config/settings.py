@@ -11,9 +11,28 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import os
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+if load_dotenv:
+    load_dotenv(BASE_DIR / '.env')
+else:
+    env_path = BASE_DIR / '.env'
+    if env_path.exists():
+        for line in env_path.read_text(encoding='utf-8').splitlines():
+            normalized = line.strip()
+            if not normalized or normalized.startswith('#') or '=' not in normalized:
+                continue
+
+            key, value = normalized.split('=', 1)
+            os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 # Quick-start development settings - unsuitable for production
@@ -49,6 +68,13 @@ INSTALLED_APPS = [
     'pharmacies',
     'medicaments',
     'reservations',
+    'deliveries',
+    'payments',
+    'transactions',
+    'invoices',
+    'refunds',
+    'subscriptions',
+    'finance',
     'notifications_app',
     'reviews',
 
@@ -163,3 +189,33 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'accounts.User'
+
+DELIVERY_BASE_FEE = os.getenv('DELIVERY_BASE_FEE', '0.00')
+DELIVERY_PRICE_PER_KM = os.getenv('DELIVERY_PRICE_PER_KM', '50.00')
+
+OTP_DEBUG_PRINT = os.getenv('OTP_DEBUG_PRINT', 'True').lower() in {
+    '1',
+    'true',
+    'yes',
+    'on',
+}
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '').replace(' ', '')
+DEFAULT_FROM_EMAIL = os.getenv(
+    'DEFAULT_FROM_EMAIL',
+    f'PharmaLocate <{EMAIL_HOST_USER}>' if EMAIL_HOST_USER else 'PharmaLocate',
+)
+
+if DEBUG:
+    print('EMAIL_HOST_USER =', EMAIL_HOST_USER or 'MISSING')
+    print('DEFAULT_FROM_EMAIL =', DEFAULT_FROM_EMAIL or 'MISSING')
+    print(
+        'EMAIL_HOST_PASSWORD =',
+        f'present length={len(EMAIL_HOST_PASSWORD)}' if EMAIL_HOST_PASSWORD else 'MISSING',
+    )
+    print('OTP_DEBUG_PRINT =', OTP_DEBUG_PRINT)

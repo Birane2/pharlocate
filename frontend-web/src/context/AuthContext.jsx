@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState } from "react";
 import API from "../api/axios";
 
@@ -5,7 +6,9 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() =>
+    Boolean(localStorage.getItem("access_token"))
+  );
 
   const getProfile = async () => {
     try {
@@ -28,7 +31,6 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem("access_token");
 
     if (!token) {
-      setLoading(false);
       return;
     }
 
@@ -39,9 +41,9 @@ export function AuthProvider({ children }) {
     run();
   }, []);
 
-  const login = async (username, password) => {
+  const login = async (phoneNumber, password) => {
     const res = await API.post("/api/auth/login/", {
-      username,
+      phone_number: phoneNumber,
       password,
     });
 
@@ -58,6 +60,40 @@ export function AuthProvider({ children }) {
 
     return profile;
   };
+
+  const persistAuthPayload = (data) => {
+    if (data?.access) {
+      localStorage.setItem("access_token", data.access);
+    }
+
+    if (data?.refresh) {
+      localStorage.setItem("refresh_token", data.refresh);
+    }
+
+    if (data?.user) {
+      localStorage.setItem("user", JSON.stringify(data.user));
+      setUser(data.user);
+    }
+  };
+
+  const verifyEmailOtp = async (email, otp) => {
+    const res = await API.post("/api/auth/verify-otp/", {
+      email,
+      otp,
+    });
+    persistAuthPayload(res.data);
+    return res.data;
+  };
+
+  const resendEmailOtp = async (email) => {
+    const res = await API.post("/api/auth/resend-otp/", {
+      email,
+    });
+    return res.data;
+  };
+
+  const verifyRegisterOtp = verifyEmailOtp;
+  const resendRegisterOtp = resendEmailOtp;
 
   const register = async (formData) => {
     const res = await API.post("/api/auth/register/", formData);
@@ -78,6 +114,10 @@ export function AuthProvider({ children }) {
         user,
         loading,
         login,
+        verifyEmailOtp,
+        resendEmailOtp,
+        verifyRegisterOtp,
+        resendRegisterOtp,
         register,
         logout,
         isAuthenticated: !!user,

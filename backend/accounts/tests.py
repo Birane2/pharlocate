@@ -22,13 +22,13 @@ class AdminUsersApiTests(APITestCase):
         )
         self.pharmacien = User.objects.create_user(
             username='pharma-user',
-            email='pharma@example.com',
-            password='secret123',
+            email='ganguebirane034@gmail.com',
+            password='00Ig20143@@',
             role='pharmacien',
         )
         self.user = User.objects.create_user(
             username='simple-user',
-            email='simple@example.com',
+            email='takkhalidou@gmail.com',
             password='secret123',
             role='utilisateur',
         )

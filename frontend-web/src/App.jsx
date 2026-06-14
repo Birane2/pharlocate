@@ -1,6 +1,10 @@
 import { Routes, Route } from "react-router-dom";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
+import VerifyOtp from "./pages/auth/VerifyOtp";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import VerifyResetOtp from "./pages/auth/VerifyResetOtp";
+import ResetPassword from "./pages/auth/ResetPassword";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import PharmacistPharmacyGate from "./routes/PharmacistPharmacyGate";
 import PharmacienDashboard from "./pages/pharmacien/PharmacienDashboard";
@@ -21,6 +25,17 @@ import MapPage from "./pages/public/MapPage";
 import NewReservation from "./pages/user/NewReservation";
 import UserReservations from "./pages/user/UserReservations";
 import Notifications from "./pages/user/Notifications";
+import Payments from "./pages/user/Payments";
+import PaymentDetail from "./pages/user/PaymentDetail";
+import Invoices from "./pages/user/Invoices";
+import InvoiceDetail from "./pages/user/InvoiceDetail";
+import FinanceDashboard from "./pages/pharmacien/FinanceDashboard";
+import FinanceTransactions from "./pages/pharmacien/FinanceTransactions";
+import PharmacienPayments from "./pages/pharmacien/PharmacienPayments";
+import PaymentMethodsConfig from "./pages/pharmacien/PaymentMethodsConfig";
+import Subscription from "./pages/pharmacien/Subscription";
+import AdminFinance from "./pages/admin/AdminFinance";
+import AdminFinanceList from "./pages/admin/AdminFinanceList";
 
 function App() {
   return (
@@ -32,6 +47,10 @@ function App() {
 
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/verify-otp" element={<VerifyOtp />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password/verify" element={<VerifyResetOtp />} />
+      <Route path="/reset-password/new" element={<ResetPassword />} />
 
       <Route
         path="/reservations/new/:pharmacyId"
@@ -56,6 +75,42 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["utilisateur"]}>
             <Notifications />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/payments"
+        element={
+          <ProtectedRoute allowedRoles={["utilisateur"]}>
+            <Payments />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/payments/:id"
+        element={
+          <ProtectedRoute allowedRoles={["utilisateur"]}>
+            <PaymentDetail />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/invoices"
+        element={
+          <ProtectedRoute allowedRoles={["utilisateur"]}>
+            <Invoices />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/invoices/:id"
+        element={
+          <ProtectedRoute allowedRoles={["utilisateur"]}>
+            <InvoiceDetail />
           </ProtectedRoute>
         }
       />
@@ -198,6 +253,115 @@ function App() {
             <PharmacistPharmacyGate>
               <PharmacienAvis />
             </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/pharmacien/finance"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <FinanceDashboard />
+            </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/pharmacien/transactions"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <FinanceTransactions />
+            </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/pharmacien/payments"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <PharmacienPayments />
+            </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/pharmacien/payment-methods"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <PaymentMethodsConfig />
+            </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/pharmacien/subscription"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <Subscription />
+            </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/finance"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminFinance />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/transactions"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminFinanceList type="transactions" title="Transactions globales" />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/payments"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminFinanceList type="payments" title="Gestion paiements" />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/invoices"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminFinanceList type="invoices" title="Gestion factures" />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/refunds"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminFinanceList type="refunds" title="Gestion remboursements" />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/subscriptions"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminFinanceList type="subscriptions" title="Gestion abonnements" />
           </ProtectedRoute>
         }
       />

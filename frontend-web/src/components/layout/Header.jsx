@@ -9,11 +9,22 @@ import {
   faLocationDot,
   faPhone,
   faRightFromBracket,
+  faRotateRight,
   faUser,
 } from "@fortawesome/free-solid-svg-icons";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import Logo from "../ui/Logo";
+
+function formatDisplayDate(value) {
+  const dateValue = value || new Date().toISOString().slice(0, 10);
+
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${dateValue}T00:00:00`));
+}
 
 function Header({
   title = "Administration",
@@ -23,17 +34,26 @@ function Header({
   showSubtitle = true,
   pharmacy,
   pharmacyHeader = false,
+  showDateFilter = false,
+  selectedDate = "",
+  onDateChange,
+  onTodayClick,
+  onResetClick,
 }) {
   const { user, logout } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const displayName = user?.role === "pharmacien" ? "Pharmacien" : user?.username || "Admin";
-  const avatarLabel = (user?.username || displayName).slice(0, 2).toUpperCase();
+  const fullName = `${user?.first_name || ""} ${user?.last_name || ""}`.trim();
+  const displayName =
+    fullName || user?.phone_number || (user?.role === "pharmacien" ? "Pharmacien" : "Admin");
+  const avatarLabel = displayName.slice(0, 2).toUpperCase();
   const pharmacyName = (pharmacy?.nom || "Votre pharmacie")
     .replace(/^(ph\.?\s*)+/i, "")
     .trim();
 
+  const isAdminDashboardHeader = user?.role === "admin" && showDateFilter;
+
   return (
-    <header className="sticky top-0 z-50 border-b border-[#2F6E9E]/10 bg-white/95 px-4 py-2 shadow-[0_8px_20px_rgba(47,110,158,0.06)] backdrop-blur sm:px-6 lg:px-7">
+    <header className="sticky top-0 z-50 border-b border-[#E5E7EB] bg-white px-4 py-5 shadow-sm sm:px-6 lg:px-7">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-4">
           {showLogo && (
@@ -85,11 +105,11 @@ function Header({
               </>
             ) : (
               <>
-                <h1 className="truncate text-lg font-bold tracking-tight text-[#2F6E9E]">
+                <h1 className="truncate text-2xl font-bold tracking-tight text-[#0B1220]">
                   {title}
                 </h1>
                 {showSubtitle && (
-                  <p className="mt-0.5 truncate text-xs font-medium leading-5 text-[#6B7280]">
+                  <p className="mt-1 truncate text-sm font-medium leading-5 text-[#6B7280]">
                     {subtitle || `Bienvenue, ${displayName}`}
                   </p>
                 )}
@@ -99,15 +119,36 @@ function Header({
         </div>
 
         <div className="flex items-center gap-2">
-          {user?.role === "admin" && (
-            <label className="hidden items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-bold text-[#6B7280] shadow-sm md:flex">
-              <FontAwesomeIcon icon={faCalendarDays} className="text-[#2F6E9E]" />
-              <input
-                type="date"
-                className="bg-transparent text-xs font-bold text-[#1C2B4A] outline-none"
-                aria-label="Selectionner une date"
-              />
-            </label>
+          {isAdminDashboardHeader && (
+            <div className="hidden items-center gap-2 md:flex">
+              <label className="relative cursor-pointer items-center gap-3 rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-bold text-[#1C2B4A] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:flex">
+                <FontAwesomeIcon icon={faCalendarDays} className="text-[#2F6E9E]" />
+                <span>{selectedDate ? formatDisplayDate(selectedDate) : "Vue globale"}</span>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(event) => onDateChange?.(event.target.value)}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  aria-label="Selectionner une date"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={onTodayClick}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#2F6E9E] px-3.5 py-3 text-xs font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#255C84] hover:shadow-md"
+              >
+                <FontAwesomeIcon icon={faCalendarDays} className="h-3.5 w-3.5" />
+                Aujourd'hui
+              </button>
+              <button
+                type="button"
+                onClick={onResetClick}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-3.5 py-3 text-xs font-bold text-[#2FA6A3] shadow-sm transition hover:-translate-y-0.5 hover:border-[#2FA6A3]/40 hover:bg-[#2FA6A3]/8 hover:shadow-md"
+              >
+                <FontAwesomeIcon icon={faRotateRight} className="h-3.5 w-3.5" />
+                Reinitialiser
+              </button>
+            </div>
           )}
 
         <div className="relative">
@@ -123,7 +164,7 @@ function Header({
             </span>
             <span className="hidden text-left sm:block">
               <span className="block max-w-28 truncate text-xs font-bold text-[#1C2B4A]">
-                {user?.username || displayName}
+                {displayName}
               </span>
               <span className="block text-[10px] font-medium text-[#6B7280]">
                 {displayName}
@@ -143,7 +184,7 @@ function Header({
               role="menu"
             >
               <p className="truncate px-2 py-1 text-xs font-bold text-[#1C2B4A]">
-                {user?.username || displayName}
+                {displayName}
               </p>
               <Link
                 to="/pharmacien/profil"

@@ -28,6 +28,7 @@ import {
   searchExternalPharmaciesNearby,
 } from "../../services/googleMapsService";
 import { computeRouteWithOsrm } from "../../services/routingService";
+import { getApiErrorMessage } from "../../utils/apiError";
 
 const zoneOptions = [
   { value: "all", label: "Toutes les zones" },
@@ -185,8 +186,11 @@ function MapPage() {
       console.error("[MapPage] erreur backend nearby", internalResult.reason);
       setInternalPharmacies([]);
       warnings.push(
-        internalResult.reason?.message ||
-          "Impossible de charger les pharmacies internes."
+        getApiErrorMessage(
+          internalResult.reason,
+          "Impossible de charger les pharmacies internes.",
+          "Erreur serveur pendant le chargement des pharmacies internes."
+        )
       );
     }
 
@@ -197,8 +201,11 @@ function MapPage() {
       console.error("[MapPage] erreur Google Places", externalResult.reason);
       setExternalPharmacies([]);
       warnings.push(
-        externalResult.reason?.message ||
-          "Impossible de charger les pharmacies Google Maps."
+        getApiErrorMessage(
+          externalResult.reason,
+          "Impossible de charger les pharmacies Google Maps.",
+          "Erreur serveur pendant le chargement des pharmacies Google Maps."
+        )
       );
     }
 
@@ -288,8 +295,11 @@ function MapPage() {
         setCenter(NOUAKCHOTT_CENTER);
         setUserPosition(null);
         setMapError(
-          requestError.message ||
-            "Impossible de charger la carte ou les pharmacies."
+          getApiErrorMessage(
+            requestError,
+            "Impossible de charger la carte ou les pharmacies.",
+            "Erreur serveur pendant le chargement de la carte."
+          )
         );
       } finally {
         if (isMounted) {
@@ -511,8 +521,11 @@ function MapPage() {
       setRoutePath([]);
       setRouteInfo(null);
       setRouteError(
-        requestError.message ||
-          "Impossible de calculer l'itineraire pour le moment."
+        getApiErrorMessage(
+          requestError,
+          "Impossible de calculer l'itineraire pour le moment.",
+          "Erreur serveur pendant le calcul de l'itineraire."
+        )
       );
     } finally {
       setRouteLoading(false);

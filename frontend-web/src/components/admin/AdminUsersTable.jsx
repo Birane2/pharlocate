@@ -25,7 +25,7 @@ function formatDate(value) {
 }
 
 function getUserInitials(user) {
-  const name = user.nom_complet || user.username || "Utilisateur";
+  const name = user.nom_complet || user.phone_number || "Utilisateur";
 
   return name
     .split(" ")
@@ -161,10 +161,10 @@ function AdminUsersTable({ users, loadingActionId, onView, onActivate, onSuspend
                     </span>
                     <div className="min-w-0">
                       <p className="truncate font-bold">
-                        {user.nom_complet || user.username}
+                        {user.nom_complet || user.phone_number}
                       </p>
                       <p className="truncate text-xs font-semibold text-[#6B7280]">
-                        @{user.username}
+                        {user.phone_number || "Telephone non renseigne"}
                       </p>
                     </div>
                   </div>
@@ -214,7 +214,7 @@ function AdminUsersTable({ users, loadingActionId, onView, onActivate, onSuspend
                 </span>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-bold text-[#1C2B4A]">
-                    {user.nom_complet || user.username}
+                    {user.nom_complet || user.phone_number}
                   </p>
                   <p className="truncate text-xs font-semibold text-[#6B7280]">
                     {user.email || "Email non renseigne"}

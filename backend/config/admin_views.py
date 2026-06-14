@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import generics, status
@@ -30,11 +32,47 @@ from reservations.models import Reservation
 class AdminDashboardStatsView(APIView):
     permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
 
+    def _get_reservation_refused_count(self, queryset):
+        return queryset.filter(statut__in=['refusee', 'annulee']).count()
+
     def get(self, request):
-        pharmacies = Pharmacy.objects.select_related('user').all()
-        users = User.objects.all()
-        reservations = Reservation.objects.select_related('user', 'pharmacie').all()
-        stocks = Stock.objects.all()
+        date_param = request.query_params.get('date')
+        selected_date = None
+
+        if date_param:
+            try:
+                selected_date = datetime.strptime(date_param, '%Y-%m-%d').date()
+            except ValueError:
+                return Response(
+                    {'error': 'Format de date invalide. Utilisez YYYY-MM-DD.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        pharmacies_all = Pharmacy.objects.select_related('user').all()
+        users_all = User.objects.all()
+        reservations_all = Reservation.objects.select_related('user', 'pharmacie').all()
+        medicaments_all = Medicament.objects.all()
+        stocks_all = Stock.objects.all()
+
+        if selected_date:
+            pharmacies = pharmacies_all.filter(date_creation__date=selected_date)
+            validated_pharmacies = pharmacies_all.filter(date_validation__date=selected_date)
+            suspended_pharmacies = pharmacies_all.filter(date_suspension__date=selected_date)
+            users = users_all.filter(date_creation__date=selected_date)
+            reservations = reservations_all.filter(date_reservation__date=selected_date)
+            medicaments = medicaments_all.filter(date_creation__date=selected_date)
+            stocks = stocks_all.filter(
+                Q(date_creation__date=selected_date)
+                | Q(date_modification__date=selected_date)
+            )
+        else:
+            pharmacies = pharmacies_all
+            validated_pharmacies = pharmacies_all.filter(est_valide=True)
+            suspended_pharmacies = pharmacies_all.filter(statut_validation='suspendue')
+            users = users_all
+            reservations = reservations_all
+            medicaments = medicaments_all
+            stocks = stocks_all
 
         users_by_role = {
             item['role']: item['total']
@@ -86,9 +124,9 @@ class AdminDashboardStatsView(APIView):
         return Response({
             'pharmacies': {
                 'total': pharmacies.count(),
-                'validees': pharmacies.filter(est_valide=True).count(),
+                'validees': validated_pharmacies.count(),
                 'en_attente': pharmacies.filter(statut_validation='en_attente').count(),
-                'suspendues': pharmacies.filter(statut_validation='suspendue').count(),
+                'suspendues': suspended_pharmacies.count(),
                 'refusees': pharmacies.filter(statut_validation='refusee').count(),
             },
             'users': {
@@ -103,17 +141,47 @@ class AdminDashboardStatsView(APIView):
                 'total': reservations.count(),
                 'en_attente': reservations.filter(statut='en_attente').count(),
                 'confirmees': reservations.filter(statut='confirmee').count(),
-                'refusees': reservations.filter(statut='refusee').count(),
+                'refusees': self._get_reservation_refused_count(reservations),
                 'recuperees': reservations.filter(statut='recuperee').count(),
                 'annulees': reservations.filter(statut='annulee').count(),
             },
             'medicaments': {
-                'total': Medicament.objects.count(),
+                'total': medicaments.count(),
             },
             'stocks': {
                 'total': stocks.count(),
                 'faibles': stocks.filter(quantite__gt=0, quantite__lte=5).count(),
                 'rupture': stocks.filter(quantite=0).count(),
+            },
+            'selected_date': selected_date.isoformat() if selected_date else None,
+            'stats': {
+                'total_pharmacies': pharmacies.count(),
+                'validated_pharmacies': validated_pharmacies.count(),
+                'pending_pharmacies': pharmacies.filter(statut_validation='en_attente').count(),
+                'total_users': users.count(),
+                'total_pharmacists': users_by_role.get('pharmacien', 0),
+                'total_reservations': reservations.count(),
+                'total_medicaments': medicaments.count(),
+                'total_stocks': stocks.count(),
+            },
+            'charts': {
+                'pharmacies_distribution': {
+                    'validated': validated_pharmacies.count(),
+                    'pending': pharmacies.filter(statut_validation='en_attente').count(),
+                    'suspended': suspended_pharmacies.count(),
+                },
+                'reservations_by_status': {
+                    'en_attente': reservations.filter(statut='en_attente').count(),
+                    'confirmee': reservations.filter(statut='confirmee').count(),
+                    'recuperee': reservations.filter(statut='recuperee').count(),
+                    'refusee': self._get_reservation_refused_count(reservations),
+                },
+            },
+            'alerts': {
+                'pending_pharmacies': pharmacies.filter(statut_validation='en_attente').count(),
+                'low_stocks': stocks.filter(quantite__gt=0, quantite__lte=5).count(),
+                'out_of_stocks': stocks.filter(quantite=0).count(),
+                'pending_reservations': reservations.filter(statut='en_attente').count(),
             },
             'latest_activities': latest_activities,
             'recent_activities': latest_activities,

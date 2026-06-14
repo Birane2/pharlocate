@@ -5,6 +5,11 @@ import {
   faCheckCircle,
   faClinicMedical,
   faClock,
+  faCreditCard,
+  faFileInvoice,
+  faMoneyBillTrendUp,
+  faReceipt,
+  faRotateLeft,
   faStar,
   faUsers,
 } from "@fortawesome/free-solid-svg-icons";
@@ -46,6 +51,36 @@ export const pharmacistLinks = [
     path: "/pharmacien/avis",
     icon: faStar,
   },
+  {
+    label: "Finance",
+    shortLabel: "Finance",
+    path: "/pharmacien/finance",
+    icon: faMoneyBillTrendUp,
+  },
+  {
+    label: "Transactions",
+    shortLabel: "Trans.",
+    path: "/pharmacien/transactions",
+    icon: faReceipt,
+  },
+  {
+    label: "Paiements",
+    shortLabel: "Pay.",
+    path: "/pharmacien/payments",
+    icon: faCreditCard,
+  },
+  {
+    label: "Moyens paiement",
+    shortLabel: "Moy.",
+    path: "/pharmacien/payment-methods",
+    icon: faCreditCard,
+  },
+  {
+    label: "Abonnement",
+    shortLabel: "Sub.",
+    path: "/pharmacien/subscription",
+    icon: faFileInvoice,
+  },
 ];
 
 export const adminLinks = [
@@ -72,5 +107,41 @@ export const adminLinks = [
     shortLabel: "Pharma",
     path: "/admin/pharmacies",
     icon: faClinicMedical,
+  },
+  {
+    label: "Finance",
+    shortLabel: "Finance",
+    path: "/admin/finance",
+    icon: faMoneyBillTrendUp,
+  },
+  {
+    label: "Transactions",
+    shortLabel: "Trans.",
+    path: "/admin/transactions",
+    icon: faReceipt,
+  },
+  {
+    label: "Paiements",
+    shortLabel: "Pay.",
+    path: "/admin/payments",
+    icon: faCreditCard,
+  },
+  {
+    label: "Factures",
+    shortLabel: "Inv.",
+    path: "/admin/invoices",
+    icon: faFileInvoice,
+  },
+  {
+    label: "Remboursements",
+    shortLabel: "Refund",
+    path: "/admin/refunds",
+    icon: faRotateLeft,
+  },
+  {
+    label: "Abonnements",
+    shortLabel: "Sub.",
+    path: "/admin/subscriptions",
+    icon: faCalendarCheck,
   },
 ];

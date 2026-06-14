@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
+  faArrowRight,
   faBoxesStacked,
   faCalendarCheck,
+  faBell,
+  faBolt,
   faChartLine,
   faCheckCircle,
   faCircleCheck,
@@ -45,7 +48,15 @@ const emptyStats = {
   latest_activities: [],
 };
 
+function getTodayDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function getApiErrorMessage(error) {
+  if (error.response?.data?.error) {
+    return error.response.data.error;
+  }
+
   if (error.response?.status === 401) {
     return "Votre session a expire. Veuillez vous reconnecter.";
   }
@@ -54,7 +65,7 @@ function getApiErrorMessage(error) {
     return "Acces refuse. Cette page est reservee aux administrateurs.";
   }
 
-  return "Impossible de charger les statistiques administrateur.";
+  return "Impossible de charger les statistiques pour cette date.";
 }
 
 function formatDate(value) {
@@ -104,7 +115,7 @@ function SkeletonCards() {
   return (
     <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
       {[1, 2, 3, 4, 5, 6].map((item) => (
-        <div key={item} className="h-24 animate-pulse rounded-2xl bg-white/80" />
+        <div key={item} className="h-[92px] animate-pulse rounded-2xl bg-white/80" />
       ))}
     </div>
   );
@@ -113,20 +124,27 @@ function SkeletonCards() {
 function PriorityAlert({ label, value, icon, tone = "blue" }) {
   const toneClass =
     tone === "danger"
-      ? "bg-[#EF4444]/10 text-[#DC2626]"
+      ? "bg-[#FEF2F2] text-[#DC2626] border-[#FEE2E2]"
       : tone === "orange"
-        ? "bg-[#F59E0B]/12 text-[#B45309]"
-        : "bg-[#2FA6A3]/10 text-[#2FA6A3]";
+        ? "bg-[#FFF7ED] text-[#D97706] border-[#FED7AA]"
+        : tone === "yellow"
+          ? "bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]"
+        : "bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]";
 
   return (
-    <article className="flex items-center justify-between gap-3 rounded-2xl border border-[#E2E8F2] bg-white px-4 py-3 shadow-sm">
+    <article className={`flex items-center justify-between gap-3 rounded-xl border px-3.5 py-3 transition hover:-translate-y-0.5 hover:shadow-sm ${toneClass}`}>
       <div className="flex items-center gap-3">
-        <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${toneClass}`}>
+        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/70">
           <FontAwesomeIcon icon={icon} className="h-4 w-4" />
         </span>
-        <p className="text-xs font-bold text-[#1C2B4A]">{label}</p>
+        <div>
+          <p className="text-base font-black">{value}</p>
+          <p className="text-xs font-semibold text-[#1C2B4A]">{label}</p>
+        </div>
       </div>
-      <p className="text-xl font-black text-[#1C2B4A]">{value}</p>
+      <div className="flex items-center gap-2">
+        <FontAwesomeIcon icon={faArrowRight} className="h-3 w-3 opacity-70" />
+      </div>
     </article>
   );
 }
@@ -135,7 +153,7 @@ function ChartCard({ title, children }) {
   return (
     <article className="rounded-2xl border border-[#E2E8F2] bg-white p-3 shadow-sm">
       <h2 className="text-sm font-bold text-[#1C2B4A]">{title}</h2>
-      <div className="mt-3 h-72 max-h-80">{children}</div>
+      <div className="mt-3 h-[280px] max-h-[280px]">{children}</div>
     </article>
   );
 }
@@ -143,17 +161,20 @@ function ChartCard({ title, children }) {
 function QuickAction({ label, to, icon, tone = "blue", onClick }) {
   const toneClass =
     tone === "turquoise"
-      ? "bg-[#2FA6A3] hover:bg-[#258C89]"
+      ? "text-[#2FA6A3] group-hover:bg-[#2FA6A3]"
       : tone === "green"
-        ? "bg-[#10B981] hover:bg-[#047857]"
-      : "bg-[#2F6E9E] hover:bg-[#245B82]";
+        ? "text-[#10B981] group-hover:bg-[#10B981]"
+      : "text-[#2F6E9E] group-hover:bg-[#2F6E9E]";
 
-  const className = `inline-flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-xs font-bold text-white shadow-sm transition hover:-translate-y-0.5 ${toneClass}`;
+  const className = "group inline-flex min-h-[116px] flex-col items-center justify-center gap-3 rounded-2xl border border-[#E2E8F2] bg-white px-3 py-4 text-center text-xs font-bold text-[#1C2B4A] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md";
+  const iconClass = `flex h-11 w-11 items-center justify-center rounded-2xl bg-current/10 text-xl transition group-hover:text-white ${toneClass}`;
 
   if (onClick) {
     return (
       <button type="button" onClick={onClick} className={className}>
-        <FontAwesomeIcon icon={icon} className="h-3.5 w-3.5" />
+        <span className={iconClass}>
+          <FontAwesomeIcon icon={icon} className="h-5 w-5" />
+        </span>
         {label}
       </button>
     );
@@ -164,7 +185,9 @@ function QuickAction({ label, to, icon, tone = "blue", onClick }) {
       to={to}
       className={className}
     >
-      <FontAwesomeIcon icon={icon} className="h-3.5 w-3.5" />
+      <span className={iconClass}>
+          <FontAwesomeIcon icon={icon} className="h-5 w-5" />
+      </span>
       {label}
     </Link>
   );
@@ -174,11 +197,12 @@ function AdminDashboard() {
   const [stats, setStats] = useState(emptyStats);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedDate, setSelectedDate] = useState(getTodayDate);
 
   useEffect(() => {
     let isMounted = true;
 
-    getAdminDashboardStats()
+    getAdminDashboardStats(selectedDate)
       .then((data) => {
         if (isMounted) {
           setStats(data);
@@ -199,8 +223,9 @@ function AdminDashboard() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selectedDate]);
 
+  const apiAlerts = stats.alerts || {};
   const pharmacies = stats.pharmacies || emptyStats.pharmacies;
   const users = stats.users || emptyStats.users;
   const usersByRole = users.by_role || emptyStats.users.by_role;
@@ -208,11 +233,20 @@ function AdminDashboard() {
   const medicaments = stats.medicaments || emptyStats.medicaments;
   const stocks = stats.stocks || emptyStats.stocks;
   const activities = stats.recent_activities || stats.latest_activities || [];
+  const hasNoDataForSelectedDate =
+    Boolean(selectedDate) &&
+    !loading &&
+    !error &&
+    (pharmacies.total || 0) === 0 &&
+    (users.total || 0) === 0 &&
+    (reservations.total || 0) === 0 &&
+    (medicaments.total || 0) === 0 &&
+    (stocks.total || 0) === 0;
 
   const statCards = useMemo(
     () => [
       {
-        label: "Pharmacies",
+        label: "Pharmacies totales",
         value: pharmacies.total || 0,
         icon: faHospital,
         tone: "blue",
@@ -233,7 +267,7 @@ function AdminDashboard() {
         label: "Pharmaciens",
         value: usersByRole.pharmacien || 0,
         icon: faUserDoctor,
-        tone: "blue",
+        tone: "purple",
       },
       {
         label: "Medicaments",
@@ -245,7 +279,7 @@ function AdminDashboard() {
         label: "Stocks",
         value: stocks.total || 0,
         icon: faBoxesStacked,
-        tone: (stocks.rupture || 0) > 0 ? "danger" : "blue",
+        tone: (stocks.rupture || 0) > 0 ? "danger" : "lightBlue",
       },
     ],
     [medicaments.total, pharmacies, stocks, usersByRole.pharmacien]
@@ -261,8 +295,10 @@ function AdminDashboard() {
             pharmacies.en_attente || 0,
             pharmacies.suspendues || 0,
           ],
-          backgroundColor: ["#10B981", "#F59E0B", "#EF4444"],
-          borderWidth: 0,
+          backgroundColor: ["#22C55E", "#F59E0B", "#EF4444"],
+          borderColor: "#FFFFFF",
+          borderWidth: 5,
+          hoverOffset: 6,
         },
       ],
     }),
@@ -271,19 +307,19 @@ function AdminDashboard() {
 
   const reservationChartData = useMemo(
     () => ({
-      labels: ["En attente", "Confirmees", "Refusees", "Recuperees"],
+      labels: ["En attente", "Confirmees", "Recuperees", "Refusees"],
       datasets: [
         {
           label: "Reservations",
           data: [
             reservations.en_attente || 0,
             reservations.confirmees || 0,
-            reservations.refusees || 0,
             reservations.recuperees || 0,
+            reservations.refusees || 0,
           ],
-          backgroundColor: ["#F59E0B", "#2F6E9E", "#EF4444", "#2FA6A3"],
+          backgroundColor: ["#F59E0B", "#2F6E9E", "#2FA6A3", "#EF4444"],
           borderRadius: 10,
-          maxBarThickness: 34,
+          maxBarThickness: 36,
         },
       ],
     }),
@@ -295,44 +331,94 @@ function AdminDashboard() {
     ]
   );
 
-  const chartOptions = {
+  const doughnutOptions = {
+    responsive: true,
     maintainAspectRatio: false,
+    cutout: "58%",
     plugins: {
       legend: {
         position: "bottom",
         labels: {
-          boxWidth: 10,
+          boxWidth: 9,
+          usePointStyle: true,
+          pointStyle: "circle",
           color: "#6B7280",
-          font: { size: 11, weight: "700" },
+          font: { size: 11, weight: "600" },
         },
+      },
+      tooltip: {
+        backgroundColor: "#FFFFFF",
+        titleColor: "#1C2B4A",
+        bodyColor: "#1C2B4A",
+        borderColor: "#E2E8F2",
+        borderWidth: 1,
+        displayColors: false,
       },
     },
   };
 
   const barOptions = {
-    ...chartOptions,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: "#FFFFFF",
+        titleColor: "#1C2B4A",
+        bodyColor: "#1C2B4A",
+        borderColor: "#E2E8F2",
+        borderWidth: 1,
+        displayColors: false,
+      },
+    },
     scales: {
       x: {
         grid: { display: false },
-        ticks: { color: "#6B7280", font: { size: 11, weight: "700" } },
+        ticks: { color: "#6B7280", font: { size: 11, weight: "600" } },
       },
       y: {
         beginAtZero: true,
-        grid: { color: "#E2E8F2" },
+        grid: { color: "#EEF2F7" },
         ticks: { precision: 0, color: "#6B7280", font: { size: 11 } },
       },
     },
+  };
+
+  const handleDateChange = (date) => {
+    setLoading(true);
+    setError("");
+    setStats(emptyStats);
+    setSelectedDate(date);
+  };
+
+  const handleToday = () => {
+    handleDateChange(getTodayDate());
+  };
+
+  const handleReset = () => {
+    handleDateChange("");
   };
 
   return (
     <AdminLayout
       title="Dashboard administrateur"
       subtitle="Vue generale de l'activite PharmaLocate."
+      showDateFilter
+      selectedDate={selectedDate}
+      onDateChange={handleDateChange}
+      onTodayClick={handleToday}
+      onResetClick={handleReset}
     >
-      <div className="space-y-3">
+      <div className="space-y-5">
         {error && (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
             {error}
+          </div>
+        )}
+
+        {hasNoDataForSelectedDate && (
+          <div className="rounded-2xl border border-[#2F6E9E]/10 bg-white px-4 py-3 text-sm font-bold text-[#6B7280] shadow-sm">
+            Aucune donnee disponible pour cette date.
           </div>
         )}
 
@@ -346,47 +432,59 @@ function AdminDashboard() {
           </section>
         )}
 
-        <section className="grid gap-3 xl:grid-cols-[1.55fr_0.65fr]">
-          <div id="analyse" className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-[#1C2B4A]">
+        <section className="grid gap-5 xl:grid-cols-[1.65fr_0.75fr]">
+          <div id="analyse" className="rounded-2xl border border-[#E2E8F2] bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <FontAwesomeIcon icon={faChartLine} className="h-4 w-4 text-[#2F6E9E]" />
+              <h2 className="text-base font-bold text-[#1C2B4A]">
                 Apercu des statistiques
               </h2>
             </div>
-            <div className="grid gap-3 lg:grid-cols-2">
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <ChartCard title="Repartition des pharmacies">
-                <Doughnut data={pharmacyChartData} options={chartOptions} />
+                <Doughnut
+                  key={`pharmacies-${selectedDate || "all"}`}
+                  data={pharmacyChartData}
+                  options={doughnutOptions}
+                />
               </ChartCard>
               <ChartCard title="Reservations par statut">
-                <Bar data={reservationChartData} options={barOptions} />
+                <Bar
+                  key={`reservations-${selectedDate || "all"}`}
+                  data={reservationChartData}
+                  options={barOptions}
+                />
               </ChartCard>
             </div>
           </div>
 
-          <aside className="rounded-2xl border border-[#E2E8F2] bg-white p-3 shadow-sm">
-            <h2 className="text-sm font-bold text-[#1C2B4A]">Alertes prioritaires</h2>
-            <div className="mt-3 space-y-2">
+          <aside className="rounded-2xl border border-[#E2E8F2] bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <FontAwesomeIcon icon={faBell} className="h-4 w-4 text-[#6B7280]" />
+              <h2 className="text-base font-bold text-[#1C2B4A]">Alertes prioritaires</h2>
+            </div>
+            <div className="mt-4 space-y-3">
               <PriorityAlert
                 label="Pharmacies en attente"
-                value={pharmacies.en_attente || 0}
+                value={apiAlerts.pending_pharmacies ?? pharmacies.en_attente ?? 0}
                 icon={faClock}
                 tone="orange"
               />
               <PriorityAlert
                 label="Stocks en rupture"
-                value={stocks.rupture || 0}
+                value={apiAlerts.out_of_stocks ?? stocks.rupture ?? 0}
                 icon={faTriangleExclamation}
                 tone="danger"
               />
               <PriorityAlert
                 label="Stocks faibles"
-                value={stocks.faibles || 0}
+                value={apiAlerts.low_stocks ?? stocks.faibles ?? 0}
                 icon={faBoxesStacked}
-                tone="orange"
+                tone="yellow"
               />
               <PriorityAlert
                 label="Reservations en attente"
-                value={reservations.en_attente || 0}
+                value={apiAlerts.pending_reservations ?? reservations.en_attente ?? 0}
                 icon={faCalendarCheck}
                 tone="blue"
               />
@@ -394,10 +492,13 @@ function AdminDashboard() {
           </aside>
         </section>
 
-        <section className="grid gap-3 xl:grid-cols-[1.35fr_0.65fr]">
+        <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
         <div className="overflow-hidden rounded-2xl border border-[#E2E8F2] bg-white shadow-sm">
-          <div className="flex items-center justify-between gap-3 border-b border-[#E2E8F2] px-4 py-3">
-            <h2 className="text-sm font-bold text-[#1C2B4A]">Dernieres activites</h2>
+          <div className="flex items-center justify-between gap-3 px-4 py-4">
+            <div className="flex items-center gap-3">
+              <FontAwesomeIcon icon={faBolt} className="h-4 w-4 text-[#6B7280]" />
+              <h2 className="text-base font-bold text-[#1C2B4A]">Dernieres activites</h2>
+            </div>
             <button
               type="button"
               className="rounded-full bg-[#2F6E9E]/8 px-3 py-1.5 text-xs font-bold text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white"
@@ -487,9 +588,12 @@ function AdminDashboard() {
           )}
         </div>
 
-        <aside className="rounded-2xl border border-[#E2E8F2] bg-white p-3 shadow-sm">
-          <h2 className="text-sm font-bold text-[#1C2B4A]">Actions rapides</h2>
-          <div className="mt-3 grid grid-cols-2 gap-2">
+        <aside className="rounded-2xl border border-[#E2E8F2] bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <FontAwesomeIcon icon={faBolt} className="h-4 w-4 text-[#6B7280]" />
+            <h2 className="text-base font-bold text-[#1C2B4A]">Actions rapides</h2>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
             <QuickAction
               label="Valider pharmacies"
               to="/admin/pharmacies-validation"
