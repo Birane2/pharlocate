@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   faBoxesStacked,
   faCheckCircle,
   faClock,
+  faCreditCard,
   faPills,
   faStar,
   faTriangleExclamation,
 } from "@fortawesome/free-solid-svg-icons";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import ActivitySummary from "../../components/dashboard/ActivitySummary";
 import CompactCharts from "../../components/dashboard/CompactCharts";
 import CompactStatCard from "../../components/dashboard/CompactStatCard";
@@ -16,6 +19,7 @@ import RecentReservations from "../../components/dashboard/RecentReservations";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import { pharmacistLinks } from "../../routes/dashboardLinks";
 import { getPharmacienDashboardStats } from "../../services/dashboardService";
+import { getPharmacienPaymentMethods } from "../../services/financeService";
 
 const emptyStats = {
   pharmacie: null,
@@ -76,17 +80,38 @@ function SkeletonDashboard() {
   );
 }
 
+function hasConfiguredPaymentMethod(config) {
+  if (!config || config.is_active === false) {
+    return false;
+  }
+
+  return [
+    config.bankily_number,
+    config.masrivi_number,
+    config.click_number,
+    config.sedad_number,
+    config.bci_pay_number,
+  ].some((value) => String(value || "").trim().length > 0);
+}
+
 function PharmacienDashboard() {
   const [stats, setStats] = useState(emptyStats);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showPaymentAlert, setShowPaymentAlert] = useState(false);
 
   const loadStats = async () => {
     setLoading(true);
     setError("");
 
     try {
-      setStats(await getPharmacienDashboardStats());
+      const [dashboardData, paymentConfig] = await Promise.all([
+        getPharmacienDashboardStats(),
+        getPharmacienPaymentMethods().catch(() => null),
+      ]);
+
+      setStats(dashboardData);
+      setShowPaymentAlert(!hasConfiguredPaymentMethod(paymentConfig));
     } catch (err) {
       setStats(emptyStats);
       setError(getApiErrorMessage(err));
@@ -98,10 +123,14 @@ function PharmacienDashboard() {
   useEffect(() => {
     let active = true;
 
-    getPharmacienDashboardStats()
-      .then((data) => {
+    Promise.all([
+      getPharmacienDashboardStats(),
+      getPharmacienPaymentMethods().catch(() => null),
+    ])
+      .then(([data, paymentConfig]) => {
         if (active) {
           setStats(data);
+          setShowPaymentAlert(!hasConfiguredPaymentMethod(paymentConfig));
         }
       })
       .catch((err) => {
@@ -207,6 +236,31 @@ function PharmacienDashboard() {
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
             {error}
+          </div>
+        )}
+
+        {!loading && showPaymentAlert && (
+          <div className="dashboard-reveal rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-amber-600 shadow-sm">
+                <FontAwesomeIcon icon={faCreditCard} />
+              </div>
+              <div>
+                <p className="text-sm font-black text-[#1C2B4A]">
+                  Vous n'avez configure aucun mode de paiement.
+                </p>
+                <p className="mt-1 text-xs font-semibold text-[#6B7280]">
+                  Ajoutez Bankily, Masrivi, Click, Sedad ou BCI Pay pour permettre
+                  aux clients de finaliser leurs reservations.
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/pharmacien/payment-methods"
+              className="mt-4 inline-flex items-center justify-center rounded-xl bg-[#2F6E9E] px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-[#255879] sm:mt-0"
+            >
+              Configurer mes paiements
+            </Link>
           </div>
         )}
 

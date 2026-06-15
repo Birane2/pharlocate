@@ -10,10 +10,19 @@ from config.permissions import (
     IsPharmacien,
 )
 
-from .models import PharmacySubscription, SubscriptionPlan
+from .models import (
+    PharmacySubscription,
+    PlatformPaymentMethod,
+    SubscriptionPayment,
+    SubscriptionPlan,
+)
 from .permissions import IsSubscriptionOwnerPharmacistOrAdmin
 from .serializers import (
+    PlatformPaymentMethodSerializer,
     PharmacySubscriptionSerializer,
+    PublicPlatformPaymentMethodSerializer,
+    SubscriptionPaymentCreateSerializer,
+    SubscriptionPaymentSerializer,
     SubscriptionPlanSerializer,
     SubscriptionRequestSerializer,
 )
@@ -22,6 +31,8 @@ from .subscription_service import (
     assign_free_plan,
     cancel_subscription,
     check_plan_limits,
+    reject_subscription_payment,
+    validate_subscription_payment,
 )
 
 
@@ -92,6 +103,87 @@ class SubscriptionRequestView(APIView):
         )
 
 
+class PlatformPaymentMethodPublicView(APIView):
+    permission_classes = [IsAuthenticatedWithTokenMessage]
+
+    def get(self, request):
+        config = PlatformPaymentMethod.objects.filter(is_active=True).first()
+        if not config:
+            return Response(
+                {
+                    'is_active': False,
+                    'beneficiary_name': 'PharmaLocate',
+                    'payment_instructions': '',
+                    'methods': [],
+                    'message': 'Aucun mode de paiement PharmaLocate configure.',
+                }
+            )
+        return Response(PublicPlatformPaymentMethodSerializer(config).data)
+
+
+class AdminPlatformPaymentMethodView(APIView):
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+
+    def get_object(self):
+        obj = PlatformPaymentMethod.objects.filter(is_active=True).first()
+        if obj:
+            return obj
+        return PlatformPaymentMethod.objects.order_by('-updated_at').first()
+
+    def get(self, request):
+        obj = self.get_object()
+        if not obj:
+            obj = PlatformPaymentMethod.objects.create(
+                beneficiary_name='PharmaLocate',
+                is_active=True,
+            )
+        return Response(PlatformPaymentMethodSerializer(obj).data)
+
+    def post(self, request):
+        return self._save(request)
+
+    def put(self, request):
+        return self._save(request)
+
+    def _save(self, request):
+        obj = self.get_object()
+        serializer = PlatformPaymentMethodSerializer(
+            obj,
+            data=request.data,
+            partial=bool(obj),
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save(is_active=request.data.get('is_active', True))
+        return Response(
+            {
+                'message': 'Modes de paiement PharmaLocate sauvegardes.',
+                'config': serializer.data,
+            }
+        )
+
+
+class SubscriptionPaymentCreateView(APIView):
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsPharmacien]
+
+    def post(self, request):
+        serializer = SubscriptionPaymentCreateSerializer(
+            data=request.data,
+            context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        payment = serializer.save()
+        return Response(
+            {
+                'message': 'Preuve de paiement abonnement envoyee.',
+                'payment': SubscriptionPaymentSerializer(
+                    payment,
+                    context={'request': request},
+                ).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
 class SubscriptionActivateView(APIView):
     permission_classes = [
         IsAuthenticatedWithTokenMessage,
@@ -152,6 +244,69 @@ class AdminSubscriptionListView(generics.ListAPIView):
         return (
             PharmacySubscription.objects.select_related('pharmacy', 'plan', 'payment', 'transaction')
             .order_by('-date_creation')
+        )
+
+
+class AdminSubscriptionPaymentListView(generics.ListAPIView):
+    serializer_class = SubscriptionPaymentSerializer
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+
+    def get_queryset(self):
+        queryset = SubscriptionPayment.objects.select_related(
+            'pharmacy',
+            'subscription__plan',
+            'validated_by',
+        ).order_by('-created_at')
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        return queryset
+
+
+class AdminSubscriptionPaymentValidateView(APIView):
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+
+    def patch(self, request, pk):
+        payment = get_object_or_404(
+            SubscriptionPayment.objects.select_related('subscription__plan', 'pharmacy'),
+            pk=pk,
+        )
+        try:
+            payment = validate_subscription_payment(payment, request.user)
+        except DjangoValidationError as exc:
+            return Response(format_django_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                'message': 'Paiement abonnement valide et abonnement active.',
+                'payment': SubscriptionPaymentSerializer(
+                    payment,
+                    context={'request': request},
+                ).data,
+            }
+        )
+
+
+class AdminSubscriptionPaymentRejectView(APIView):
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+
+    def patch(self, request, pk):
+        payment = get_object_or_404(
+            SubscriptionPayment.objects.select_related('subscription__plan', 'pharmacy'),
+            pk=pk,
+        )
+        reason = request.data.get('rejection_reason') or request.data.get('reason') or ''
+        try:
+            payment = reject_subscription_payment(payment, request.user, reason=reason)
+        except DjangoValidationError as exc:
+            return Response(format_django_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                'message': 'Paiement abonnement refuse.',
+                'payment': SubscriptionPaymentSerializer(
+                    payment,
+                    context={'request': request},
+                ).data,
+            }
         )
 
 

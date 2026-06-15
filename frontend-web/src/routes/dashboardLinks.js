@@ -11,6 +11,7 @@ import {
   faReceipt,
   faRotateLeft,
   faStar,
+  faTruckFast,
   faUsers,
 } from "@fortawesome/free-solid-svg-icons";
 
@@ -76,6 +77,12 @@ export const pharmacistLinks = [
     icon: faCreditCard,
   },
   {
+    label: "Livraisons",
+    shortLabel: "Livr.",
+    path: "/pharmacien/deliveries",
+    icon: faTruckFast,
+  },
+  {
     label: "Abonnement",
     shortLabel: "Sub.",
     path: "/pharmacien/subscription",
@@ -125,6 +132,18 @@ export const adminLinks = [
     shortLabel: "Pay.",
     path: "/admin/payments",
     icon: faCreditCard,
+  },
+  {
+    label: "Modes de paiement",
+    shortLabel: "Moy.",
+    path: "/admin/payment-methods",
+    icon: faCreditCard,
+  },
+  {
+    label: "Paiements abonnements",
+    shortLabel: "Subs pay.",
+    path: "/admin/subscription-payments",
+    icon: faMoneyBillTrendUp,
   },
   {
     label: "Factures",

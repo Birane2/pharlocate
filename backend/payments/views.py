@@ -6,12 +6,25 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
+from config.permissions import IsAdminRole
 from pharmacies.models import Pharmacy
 from reservations.models import Reservation
 from reservations.services import calculate_reservation_amount, confirm_reservation
+from subscriptions.models import SubscriptionPayment
+from subscriptions.serializers import SubscriptionPaymentSerializer
+from subscriptions.subscription_service import (
+    reject_subscription_payment,
+    validate_subscription_payment,
+)
 
 from .models import Payment, PaymentMethod, PharmacyPaymentMethod
-from .serializers import PaymentSerializer, PharmacyPaymentMethodSerializer
+from .serializers import (
+    AdminPaymentSerializer,
+    PaymentSerializer,
+    PharmacyPaymentMethodSerializer,
+)
+from .services import reject_payment as reject_payment_service
+from .services import validate_payment as validate_payment_service
 
 
 def get_pharmacist_pharmacy(user):
@@ -20,6 +33,165 @@ def get_pharmacist_pharmacy(user):
 
 def is_pharmacy_owner(user, pharmacy):
     return getattr(pharmacy, 'user_id', None) == user.id
+
+
+def _zero():
+    return 0
+
+
+def _full_name(user):
+    if not user:
+        return ''
+    return user.get_full_name() or getattr(user, 'phone_number', '') or user.username
+
+
+def _file_url(request, file_field):
+    if not file_field:
+        return ''
+    try:
+        url = file_field.url
+    except ValueError:
+        return ''
+    return request.build_absolute_uri(url) if request else url
+
+
+def serialize_admin_reservation_payment(payment, request=None):
+    return {
+        'id': f'reservation-{payment.id}',
+        'source_id': payment.id,
+        'payment_type': 'reservation_payment',
+        'reference': f'PAY-{payment.id:06d}',
+        'user_name': _full_name(payment.user),
+        'pharmacy_id': payment.pharmacy_id,
+        'pharmacy_name': payment.pharmacy.nom if payment.pharmacy_id else '',
+        'reservation_id': payment.reservation_id,
+        'subscription_id': None,
+        'payment_method': payment.payment_method.nom if payment.payment_method_id else '',
+        'transaction_id': payment.transaction_id or '',
+        'client_phone': payment.numero_client or '',
+        'amount': payment.montant_total,
+        'amount_medicines': payment.montant_medicaments,
+        'delivery_fee': payment.frais_livraison,
+        'status': payment.statut,
+        'rejection_reason': payment.motif_refus or '',
+        'proof_image_url': _file_url(request, payment.capture_paiement),
+        'validated_by': _full_name(payment.valide_par),
+        'validated_at': payment.date_validation,
+        'created_at': payment.date_creation,
+    }
+
+
+def serialize_admin_subscription_payment(payment, request=None):
+    status_map = {
+        SubscriptionPayment.STATUS_PENDING: Payment.STATUS_PENDING,
+        SubscriptionPayment.STATUS_VALIDATED: Payment.STATUS_VALIDATED,
+        SubscriptionPayment.STATUS_REJECTED: Payment.STATUS_REJECTED,
+        SubscriptionPayment.STATUS_CANCELLED: Payment.STATUS_CANCELLED,
+    }
+    return {
+        'id': f'subscription-{payment.id}',
+        'source_id': payment.id,
+        'payment_type': 'subscription_payment',
+        'reference': f'SUBPAY-{payment.id:06d}',
+        'user_name': _full_name(payment.pharmacy.user) if payment.pharmacy_id else '',
+        'pharmacy_id': payment.pharmacy_id,
+        'pharmacy_name': payment.pharmacy.nom if payment.pharmacy_id else '',
+        'reservation_id': None,
+        'subscription_id': payment.subscription_id,
+        'payment_method': payment.get_payment_method_display(),
+        'transaction_id': payment.transaction_id or '',
+        'client_phone': getattr(payment.pharmacy, 'telephone', '') or '',
+        'amount': payment.amount,
+        'amount_medicines': _zero(),
+        'delivery_fee': _zero(),
+        'status': status_map.get(payment.status, payment.status),
+        'rejection_reason': payment.rejection_reason or '',
+        'proof_image_url': _file_url(request, payment.proof_image),
+        'validated_by': _full_name(payment.validated_by),
+        'validated_at': payment.validated_at,
+        'created_at': payment.created_at,
+    }
+
+
+def build_admin_payments(request):
+    reservation_payments = Payment.objects.select_related(
+        'reservation',
+        'pharmacy',
+        'user',
+        'payment_method',
+        'valide_par',
+    ).order_by('-date_creation')
+    subscription_payments = SubscriptionPayment.objects.select_related(
+        'subscription__plan',
+        'pharmacy__user',
+        'validated_by',
+    ).order_by('-created_at')
+
+    items = [
+        serialize_admin_reservation_payment(payment, request=request)
+        for payment in reservation_payments
+    ]
+    items.extend(
+        serialize_admin_subscription_payment(payment, request=request)
+        for payment in subscription_payments
+    )
+
+    status_filter = request.query_params.get('status') or request.query_params.get('statut')
+    type_filter = request.query_params.get('type') or request.query_params.get('payment_type')
+    pharmacy_filter = request.query_params.get('pharmacy')
+    date_filter = request.query_params.get('date')
+    search = (request.query_params.get('search') or '').strip().lower()
+
+    filtered = []
+    for item in items:
+        if status_filter and item['status'] != status_filter:
+            continue
+        if type_filter and item['payment_type'] != type_filter:
+            continue
+        if pharmacy_filter and str(item.get('pharmacy_id', '')) != str(pharmacy_filter):
+            continue
+        if date_filter and str(item['created_at'].date()) != date_filter:
+            continue
+        if search:
+            haystack = ' '.join([
+                item['reference'],
+                item['transaction_id'],
+                item['user_name'],
+                item['pharmacy_name'],
+                str(item['reservation_id'] or ''),
+                str(item['subscription_id'] or ''),
+            ]).lower()
+            if search not in haystack:
+                continue
+        filtered.append(item)
+
+    filtered.sort(key=lambda item: item['created_at'], reverse=True)
+    return filtered
+
+
+def get_admin_payment_object(identifier):
+    value = str(identifier)
+    if value.startswith('subscription-'):
+        return 'subscription_payment', SubscriptionPayment.objects.select_related(
+            'subscription__plan',
+            'pharmacy__user',
+            'validated_by',
+        ).get(pk=value.replace('subscription-', ''))
+    if value.startswith('reservation-'):
+        return 'reservation_payment', Payment.objects.select_related(
+            'reservation',
+            'pharmacy',
+            'user',
+            'payment_method',
+            'valide_par',
+        ).get(pk=value.replace('reservation-', ''))
+    return 'reservation_payment', Payment.objects.select_related(
+        'reservation',
+        'pharmacy',
+        'user',
+        'payment_method',
+        'valide_par',
+    ).get(pk=value)
 
 
 @api_view(['GET'])
@@ -74,9 +246,9 @@ def public_pharmacy_payment_methods(request, pharmacy_id):
     )
 
     if configuration is None or not configuration.is_active:
-        message = "Cette pharmacie n'a pas encore configuré ses modes de paiement."
+        message = "Aucun mode de paiement n'a encore ete configure par cette pharmacie."
     elif not has_configured_methods:
-        message = "Cette pharmacie n'a pas encore configuré ses modes de paiement."
+        message = "Aucun mode de paiement n'a encore ete configure par cette pharmacie."
     else:
         message = ''
 
@@ -246,8 +418,9 @@ def pharmacist_orders(request):
     ).select_related(
         'reservation',
         'pharmacy',
-        'user'
-    ).order_by('-created_at')
+        'user',
+        'payment_method',
+    ).order_by('-date_creation')
 
     serializer = PaymentSerializer(
         payments,
@@ -259,13 +432,173 @@ def pharmacist_orders(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def admin_payments(request):
+    payments = Payment.objects.select_related(
+        'reservation',
+        'pharmacy',
+        'user',
+        'payment_method',
+    ).order_by('-date_creation')
+
+    status_filter = request.query_params.get('status') or request.query_params.get('statut')
+    if status_filter:
+        payments = payments.filter(statut=status_filter)
+
+    serializer = PaymentSerializer(
+        payments,
+        many=True,
+        context={'request': request}
+    )
+
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def admin_payment_center(request):
+    serializer = AdminPaymentSerializer(
+        build_admin_payments(request),
+        many=True,
+    )
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def admin_payment_summary(request):
+    items = build_admin_payments(request)
+    return Response({
+        'total_payments': len(items),
+        'pending_payments': sum(
+            1 for item in items if item['status'] == Payment.STATUS_PENDING
+        ),
+        'validated_payments': sum(
+            1 for item in items if item['status'] == Payment.STATUS_VALIDATED
+        ),
+        'rejected_payments': sum(
+            1 for item in items if item['status'] == Payment.STATUS_REJECTED
+        ),
+        'cancelled_payments': sum(
+            1 for item in items if item['status'] == Payment.STATUS_CANCELLED
+        ),
+        'refunded_payments': sum(
+            1 for item in items if item['status'] == Payment.STATUS_REFUNDED
+        ),
+        'total_amount': sum((item['amount'] for item in items), 0),
+        'validated_amount': sum(
+            (item['amount'] for item in items if item['status'] == Payment.STATUS_VALIDATED),
+            0,
+        ),
+        'subscription_amount': sum(
+            (item['amount'] for item in items if item['payment_type'] == 'subscription_payment'),
+            0,
+        ),
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def admin_payment_detail(request, pk):
+    try:
+        payment_type, payment = get_admin_payment_object(pk)
+    except (Payment.DoesNotExist, SubscriptionPayment.DoesNotExist, ValueError):
+        return Response(
+            {'error': 'Paiement introuvable.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    data = (
+        serialize_admin_subscription_payment(payment, request=request)
+        if payment_type == 'subscription_payment'
+        else serialize_admin_reservation_payment(payment, request=request)
+    )
+    return Response(AdminPaymentSerializer(data).data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def admin_payments_by_status(request, payment_status):
+    items = [
+        item
+        for item in build_admin_payments(request)
+        if item['status'] == payment_status
+    ]
+    serializer = AdminPaymentSerializer(
+        items,
+        many=True,
+    )
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def admin_validate_payment(request, pk):
+    try:
+        payment_type, payment = get_admin_payment_object(pk)
+        if payment_type == 'subscription_payment':
+            validate_subscription_payment(payment, request.user)
+            data = serialize_admin_subscription_payment(payment, request=request)
+        else:
+            validate_payment_service(payment, request.user)
+            payment.refresh_from_db()
+            data = serialize_admin_reservation_payment(payment, request=request)
+    except (Payment.DoesNotExist, SubscriptionPayment.DoesNotExist, ValueError):
+        return Response(
+            {'error': 'Paiement introuvable.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as exc:
+        return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({
+        'message': 'Paiement valide avec succes.',
+        'payment': AdminPaymentSerializer(data).data,
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def admin_reject_payment(request, pk):
+    reason = (
+        request.data.get('reason')
+        or request.data.get('motif_refus')
+        or request.data.get('rejection_reason')
+        or ''
+    )
+
+    try:
+        payment_type, payment = get_admin_payment_object(pk)
+        if payment_type == 'subscription_payment':
+            reject_subscription_payment(payment, request.user, reason=reason)
+            data = serialize_admin_subscription_payment(payment, request=request)
+        else:
+            reject_payment_service(payment, request.user, reason)
+            payment.refresh_from_db()
+            data = serialize_admin_reservation_payment(payment, request=request)
+    except (Payment.DoesNotExist, SubscriptionPayment.DoesNotExist, ValueError):
+        return Response(
+            {'error': 'Paiement introuvable.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    except Exception as exc:
+        return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({
+        'message': 'Paiement refuse.',
+        'payment': AdminPaymentSerializer(data).data,
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def pharmacist_order_detail(request, pk):
     try:
         payment = Payment.objects.select_related(
             'reservation',
             'pharmacy',
-            'user'
+            'user',
+            'payment_method',
         ).get(pk=pk)
     except Payment.DoesNotExist:
         return Response({
@@ -281,7 +614,7 @@ def pharmacist_order_detail(request, pk):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-@api_view(['PATCH'])
+@api_view(['PATCH', 'POST'])
 @permission_classes([IsAuthenticated])
 def validate_payment(request, pk):
     try:
@@ -304,7 +637,12 @@ def validate_payment(request, pk):
             'error': 'Ce paiement ne peut plus être validé.'
         }, status=status.HTTP_400_BAD_REQUEST)
 
-    payment.validate_payment(request.user)
+    try:
+        validate_payment_service(payment, request.user)
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_400_BAD_REQUEST)
 
     return Response({
         'message': 'Paiement validé avec succès.',
@@ -312,10 +650,10 @@ def validate_payment(request, pk):
     }, status=status.HTTP_200_OK)
 
 
-@api_view(['PATCH'])
+@api_view(['PATCH', 'POST'])
 @permission_classes([IsAuthenticated])
 def reject_payment(request, pk):
-    reason = request.data.get('reason', '')
+    reason = request.data.get('reason') or request.data.get('motif_refus') or ''
 
     try:
         payment = Payment.objects.select_related(
@@ -337,7 +675,12 @@ def reject_payment(request, pk):
             'error': 'Ce paiement ne peut plus être refusé.'
         }, status=status.HTTP_400_BAD_REQUEST)
 
-    payment.reject_payment(request.user, reason)
+    try:
+        reject_payment_service(payment, request.user, reason)
+    except Exception as e:
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_400_BAD_REQUEST)
 
     return Response({
         'message': 'Paiement refusé.',
@@ -374,7 +717,7 @@ def update_reservation_status(reservation, new_status):
     return reservation
 
 
-@api_view(['PATCH'])
+@api_view(['PATCH', 'POST'])
 @permission_classes([IsAuthenticated])
 def confirm_order(request, pk):
     try:
@@ -449,7 +792,7 @@ def change_order_status(request, pk, current_allowed, new_status, message):
     }, status=status.HTTP_200_OK)
 
 
-@api_view(['PATCH'])
+@api_view(['PATCH', 'POST'])
 @permission_classes([IsAuthenticated])
 def prepare_order(request, pk):
     return change_order_status(
@@ -461,7 +804,7 @@ def prepare_order(request, pk):
     )
 
 
-@api_view(['PATCH'])
+@api_view(['PATCH', 'POST'])
 @permission_classes([IsAuthenticated])
 def ready_order(request, pk):
     return change_order_status(
@@ -473,7 +816,7 @@ def ready_order(request, pk):
     )
 
 
-@api_view(['PATCH'])
+@api_view(['PATCH', 'POST'])
 @permission_classes([IsAuthenticated])
 def delivered_order(request, pk):
     response = change_order_status(

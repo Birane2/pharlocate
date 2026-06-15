@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { useLocation } from "react-router-dom";
 import {
   faCheck,
   faClock,
@@ -14,14 +15,14 @@ import PharmacienLayout from "../../layouts/PharmacienLayout";
 import { EmptyState, StatusBadge } from "../finance/FinanceUI";
 import { dateTime, money } from "../finance/financeFormat";
 import {
-  getPharmacienPayments,
+  getPharmacienOrders,
   rejectPayment,
   validatePayment,
 } from "../../services/financeService";
 
 const filters = [
   { value: "all", label: "Tous" },
-  { value: "en_attente_validation", label: "En attente" },
+  { value: "en_attente_verification", label: "En attente" },
   { value: "valide", label: "Valides" },
   { value: "refuse", label: "Refuses" },
   { value: "non_paye", label: "Non payes" },
@@ -43,11 +44,14 @@ function apiErrorMessage(error, fallback) {
 }
 
 function PharmacienPayments() {
+  const location = useLocation();
+  // Debug temporaire (à supprimer après validation)
+  console.log(location.pathname);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [activeFilter, setActiveFilter] = useState("en_attente_validation");
+  const [activeFilter, setActiveFilter] = useState("en_attente_verification");
   const [processingId, setProcessingId] = useState(null);
   const [rejectTarget, setRejectTarget] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -57,7 +61,7 @@ function PharmacienPayments() {
     setError("");
 
     try {
-      setPayments(await getPharmacienPayments());
+      setPayments(await getPharmacienOrders());
     } catch (loadError) {
       setError(
         apiErrorMessage(loadError, "Impossible de charger les paiements.")
@@ -72,7 +76,7 @@ function PharmacienPayments() {
 
     const loadInitial = async () => {
       try {
-        const data = await getPharmacienPayments();
+        const data = await getPharmacienOrders();
         if (!ignore) setPayments(data);
       } catch (loadError) {
         if (!ignore) {
@@ -259,7 +263,7 @@ function PharmacienPayments() {
 }
 
 function PaymentCard({ payment, processing, onValidate, onReject }) {
-  const actionable = payment.statut === "en_attente_validation";
+  const actionable = payment.statut === "en_attente_verification";
 
   return (
     <article className="rounded-2xl border border-[#E2E8F2] bg-[#FCFDFE] p-4 transition hover:border-[#BFD3E4] hover:shadow-sm">

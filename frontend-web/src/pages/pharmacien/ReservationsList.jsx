@@ -1,573 +1,650 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faBagShopping,
   faBoxOpen,
   faCheck,
-  faChevronLeft,
-  faChevronRight,
+  faClipboardCheck,
   faClock,
   faEye,
-  faReceipt,
+  faImage,
+  faLocationDot,
+  faMotorcycle,
+  faRotate,
   faTimes,
+  faTruckFast,
 } from "@fortawesome/free-solid-svg-icons";
 import DashboardLayout from "../../components/layout/DashboardLayout";
-import Card from "../../components/ui/Card";
 import { pharmacistLinks } from "../../routes/dashboardLinks";
 import {
-  cancelReservation,
-  confirmReservation,
-  getReservations,
-  markReservationPickedUp,
-  markReservationReady,
-} from "../../services/reservationService";
+  confirmOrder,
+  getPharmacienOrders,
+  markOrderDelivered,
+  markOrderReady,
+  prepareOrder,
+  rejectPayment,
+  validatePayment,
+} from "../../services/financeService";
+import { money, dateTime } from "../finance/financeFormat";
 
-const PAGE_SIZE = 5;
-
-const statusConfig = {
-  en_attente: {
-    label: "En attente",
-    className: "bg-orange-50 text-orange-700",
-  },
-  confirmee: {
-    label: "Confirmee",
-    className: "bg-[#2F6E9E]/10 text-[#2F6E9E]",
-  },
-  prete: {
-    label: "Prete",
-    className: "bg-[#2FA6A3]/10 text-[#2FA6A3]",
-  },
-  recuperee: {
-    label: "Recuperee",
-    className: "bg-[#10B981]/10 text-[#047857]",
-  },
-  refusee: {
-    label: "Refusee",
-    className: "bg-red-50 text-red-600",
-  },
-  annulee: {
-    label: "Annulee",
-    className: "bg-red-50 text-red-600",
-  },
-};
-
-const filters = [
+const paymentFilters = [
   { value: "all", label: "Toutes" },
-  { value: "en_attente", label: "En attente" },
+  { value: "payment_pending", label: "Paiement en attente" },
   { value: "confirmee", label: "Confirmees" },
+  { value: "en_preparation", label: "En preparation" },
+  { value: "prete", label: "Pretes" },
+  { value: "livree", label: "Livrees" },
   { value: "refusee", label: "Refusees" },
 ];
 
-function StatusBadge({ status }) {
-  const config = statusConfig[status] || {
-    label: status || "Inconnu",
-    className: "bg-[#F1F5F9] text-[#6B7280]",
-  };
+const orderStatus = {
+  en_attente: ["En attente", "bg-amber-50 text-amber-700"],
+  confirmee: ["Confirmee", "bg-[#2F6E9E]/10 text-[#2F6E9E]"],
+  en_preparation: ["Preparation", "bg-indigo-50 text-indigo-700"],
+  prete: ["Prete", "bg-[#2FA6A3]/10 text-[#167769]"],
+  livree: ["Livree", "bg-emerald-50 text-emerald-700"],
+  refusee: ["Refusee", "bg-red-50 text-red-700"],
+  annulee: ["Annulee", "bg-slate-100 text-slate-600"],
+};
+
+const paymentStatus = {
+  en_attente_verification: ["Paiement en attente", "bg-amber-50 text-amber-700"],
+  valide: ["Paiement valide", "bg-emerald-50 text-emerald-700"],
+  refuse: ["Paiement refuse", "bg-red-50 text-red-700"],
+  annule: ["Paiement annule", "bg-slate-100 text-slate-600"],
+  rembourse: ["Rembourse", "bg-blue-50 text-blue-700"],
+};
+
+function getApiErrorMessage(error, fallback = "Impossible de traiter cette action.") {
+  const data = error?.response?.data;
+
+  if (error?.response?.status === 401) {
+    return "Votre session a expire. Veuillez vous reconnecter.";
+  }
+
+  if (error?.response?.status === 403) {
+    return "Vous n'etes pas autorise a traiter cette commande.";
+  }
+
+  if (typeof data?.error === "string") return data.error;
+  if (typeof data?.detail === "string") return data.detail;
+
+  if (data?.error && typeof data.error === "object") {
+    const firstValue = Object.values(data.error)[0];
+    if (Array.isArray(firstValue)) return firstValue[0];
+    if (typeof firstValue === "string") return firstValue;
+  }
+
+  return fallback;
+}
+
+function Badge({ value, config }) {
+  const [label, className] = config[value] || [
+    value || "-",
+    "bg-slate-100 text-slate-600",
+  ];
 
   return (
-    <span className={`inline-flex min-w-24 justify-center rounded-full px-3 py-1 text-xs font-bold ${config.className}`}>
-      {config.label}
+    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ${className}`}>
+      {label}
     </span>
   );
 }
 
-function formatDate(value) {
-  if (!value) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat("fr-FR", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value));
+function typeLabel(type) {
+  return type === "livraison" ? "Livraison" : "Retrait";
 }
 
-function formatTotal(value) {
-  return `${Number(value || 0).toFixed(0)} MRU`;
-}
-
-function getItemsSummary(reservation) {
-  const items = reservation.items || [];
+function getItemsSummary(order) {
+  const items = order.items || [];
 
   if (items.length === 0) {
     return "Aucun medicament";
   }
 
-  return items
-    .map((item) => `${item.medicament_nom} x${item.quantite}`)
-    .join(", ");
-}
-
-function IconButton({ label, icon, tone = "blue", loading = false, onClick }) {
-  const toneClass =
-    tone === "danger"
-      ? "text-red-600 hover:bg-red-50 focus:ring-red-100"
-      : tone === "success"
-        ? "text-[#047857] hover:bg-[#10B981]/10 focus:ring-[#10B981]/15"
-        : tone === "turquoise"
-          ? "text-[#2FA6A3] hover:bg-[#2FA6A3]/10 focus:ring-[#2FA6A3]/15"
-          : "text-[#2F6E9E] hover:bg-[#2F6E9E]/8 focus:ring-[#2F6E9E]/15";
-
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      disabled={loading}
-      onClick={onClick}
-      className={`flex h-8 w-8 items-center justify-center rounded-lg transition focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`}
-    >
-      <FontAwesomeIcon icon={icon} className="h-3.5 w-3.5" />
-    </button>
-  );
+  return items.map((item) => `${item.medicament_nom} x${item.quantite}`).join(", ");
 }
 
 function ReservationsList() {
-  const [reservations, setReservations] = useState([]);
-  const [expandedId, setExpandedId] = useState(null);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [filter, setFilter] = useState("all");
   const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [pagination, setPagination] = useState({
-    count: 0,
-    currentPage: 1,
-    next: null,
-    previous: null,
-  });
+  const [success, setSuccess] = useState("");
 
-  const totalPages = Math.max(1, Math.ceil(pagination.count / PAGE_SIZE));
-
-  const getErrorMessage = (err) => {
-    if (err.response?.status === 401) {
-      return "Votre session a expire. Veuillez vous reconnecter.";
-    }
-
-    if (err.response?.status === 403) {
-      return "Acces refuse.";
-    }
-
-    if (err.response?.status === 500) {
-      return "Erreur serveur. Reessayez plus tard.";
-    }
-
-    return (
-      err.response?.data?.error ||
-      err.response?.data?.detail ||
-      "Impossible de traiter cette action."
-    );
-  };
-
-  const loadReservations = async (page = 1) => {
+  const loadOrders = async () => {
     setLoading(true);
     setError("");
 
     try {
-      const data = await getReservations({ page });
-      setReservations(data.results || []);
-      setPagination({
-        count: data.count || 0,
-        currentPage: page,
-        next: data.next || null,
-        previous: data.previous || null,
-      });
-    } catch (err) {
-      setReservations([]);
-      setError(getErrorMessage(err));
+      setOrders(await getPharmacienOrders());
+    } catch (loadError) {
+      setOrders([]);
+      setError(getApiErrorMessage(loadError, "Impossible de charger les commandes."));
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    const run = async () => {
-      setLoading(true);
-      setError("");
+    let ignore = false;
 
-      try {
-        const data = await getReservations({ page: 1 });
-        setReservations(data.results || []);
-        setPagination({
-          count: data.count || 0,
-          currentPage: 1,
-          next: data.next || null,
-          previous: data.previous || null,
-        });
-      } catch (err) {
-        setReservations([]);
-        setError(getErrorMessage(err));
-      } finally {
-        setLoading(false);
-      }
+    getPharmacienOrders()
+      .then((data) => {
+        if (!ignore) setOrders(data);
+      })
+      .catch((loadError) => {
+        if (!ignore) {
+          setError(getApiErrorMessage(loadError, "Impossible de charger les commandes."));
+        }
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+
+    return () => {
+      ignore = true;
     };
-
-    run();
   }, []);
 
-  const kpis = useMemo(
-    () => [
-      { label: "Total reservations", value: pagination.count, icon: faReceipt, tone: "blue" },
-      {
-        label: "En attente",
-        value: reservations.filter((item) => item.statut === "en_attente").length,
-        icon: faClock,
-        tone: "orange",
-      },
-      {
-        label: "Confirmees",
-        value: reservations.filter((item) => item.statut === "confirmee").length,
-        icon: faCheck,
-        tone: "blue",
-      },
-      {
-        label: "Pretes",
-        value: reservations.filter((item) => item.statut === "prete").length,
-        icon: faBoxOpen,
-        tone: "turquoise",
-      },
-    ],
-    [pagination.count, reservations]
+  const stats = useMemo(
+    () => ({
+      total: orders.length,
+      paymentPending: orders.filter((order) => order.statut === "en_attente_verification")
+        .length,
+      validated: orders.filter((order) => order.statut === "valide").length,
+      ready: orders.filter((order) => order.reservation_status === "prete").length,
+      deliveries: orders.filter(
+        (order) =>
+          order.reservation_type === "livraison" &&
+          !["livree", "annulee", "refusee"].includes(order.reservation_status)
+      ).length,
+    }),
+    [orders]
   );
 
-  const filteredReservations = useMemo(() => {
-    return reservations.filter((reservation) => {
-      return statusFilter === "all" || reservation.statut === statusFilter;
-    });
-  }, [reservations, statusFilter]);
+  const visibleOrders = useMemo(() => {
+    if (filter === "all") return orders;
+    if (filter === "payment_pending") {
+      return orders.filter((order) => order.statut === "en_attente_verification");
+    }
+    return orders.filter((order) => order.reservation_status === filter);
+  }, [filter, orders]);
 
-  const runAction = async (reservationId, action, successText) => {
-    setActionLoadingId(reservationId);
+  const runAction = async (order, action, successMessage, options = {}) => {
+    setActionLoadingId(order.id);
     setError("");
-    setSuccessMessage("");
+    setSuccess("");
 
     try {
-      const response = await action(reservationId);
-
-      if (response?.reservation) {
-        setReservations((currentReservations) =>
-          currentReservations.map((reservation) =>
-            reservation.id === reservationId ? response.reservation : reservation
-          )
-        );
-      }
-
-      setSuccessMessage(response?.message || successText);
-      await loadReservations(pagination.currentPage);
-    } catch (err) {
-      setError(getErrorMessage(err));
+      await action(order.id);
+      setSuccess(successMessage);
+      if (options.closeDetail) setSelectedOrder(null);
+      await loadOrders();
+    } catch (actionError) {
+      setError(getApiErrorMessage(actionError));
     } finally {
       setActionLoadingId(null);
     }
   };
 
-  const handleConfirm = async (reservationId) => {
-    const confirmed = window.confirm("Voulez-vous vraiment confirmer cette reservation ?");
-
-    if (!confirmed) {
-      return;
-    }
+  const handleReject = async (order) => {
+    const reason = window.prompt("Motif du refus du paiement :");
+    if (!reason || !reason.trim()) return;
 
     await runAction(
-      reservationId,
-      confirmReservation,
-      "Reservation confirmee avec succes."
-    );
-  };
-
-  const handleCancel = async (reservationId) => {
-    const confirmed = window.confirm("Voulez-vous vraiment refuser cette reservation ?");
-
-    if (!confirmed) {
-      return;
-    }
-
-    await runAction(
-      reservationId,
-      cancelReservation,
-      "Reservation refusee avec succes."
-    );
-  };
-
-  const renderActions = (reservation) => {
-    const isLoading = actionLoadingId === reservation.id;
-
-    return (
-      <div className="flex flex-wrap justify-end gap-1">
-        <IconButton
-          label="Voir"
-          icon={faEye}
-          loading={isLoading}
-          onClick={() =>
-            setExpandedId(expandedId === reservation.id ? null : reservation.id)
-          }
-        />
-        {reservation.statut === "en_attente" && (
-          <>
-            <IconButton
-              label="Confirmer"
-              icon={faCheck}
-              tone="success"
-              loading={isLoading}
-              onClick={() => handleConfirm(reservation.id)}
-            />
-            <IconButton
-              label="Refuser"
-              icon={faTimes}
-              tone="danger"
-              loading={isLoading}
-              onClick={() => handleCancel(reservation.id)}
-            />
-          </>
-        )}
-        {reservation.statut === "confirmee" && (
-          <IconButton
-            label="Marquer prete"
-            icon={faBoxOpen}
-            tone="turquoise"
-            loading={isLoading}
-            onClick={() =>
-              runAction(
-                reservation.id,
-                markReservationReady,
-                "Reservation marquee comme prete."
-              )
-            }
-          />
-        )}
-        {reservation.statut === "prete" && (
-          <IconButton
-            label="Marquer recuperee"
-            icon={faBagShopping}
-            tone="success"
-            loading={isLoading}
-            onClick={() =>
-              runAction(
-                reservation.id,
-                markReservationPickedUp,
-                "Reservation marquee comme recuperee."
-              )
-            }
-          />
-        )}
-      </div>
+      order,
+      (id) => rejectPayment(id, reason.trim()),
+      "Paiement refuse. Le patient sera notifie.",
+      { closeDetail: true }
     );
   };
 
   return (
     <DashboardLayout
-      title="Reservations"
+      title="Commandes"
       links={pharmacistLinks}
-      headerSubtitle="Suivez et traitez les demandes des patients."
+      headerSubtitle="Validez les paiements et traitez les commandes patients."
     >
-      <div className="mx-auto max-w-7xl space-y-3">
-        <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          {kpis.map((item) => (
-            <article
-              key={item.label}
-              className="rounded-2xl border border-[#E2E8F2] bg-white px-4 py-3 shadow-sm"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-2xl font-black text-[#1C2B4A]">{item.value}</p>
-                  <p className="mt-0.5 text-xs font-bold text-[#6B7280]">{item.label}</p>
-                </div>
-                <span
-                  className={`flex h-9 w-9 items-center justify-center rounded-xl ${
-                    item.tone === "orange"
-                      ? "bg-orange-50 text-orange-700"
-                      : item.tone === "turquoise"
-                        ? "bg-[#2FA6A3]/10 text-[#2FA6A3]"
-                        : "bg-[#2F6E9E]/10 text-[#2F6E9E]"
-                  }`}
-                >
-                  <FontAwesomeIcon icon={item.icon} className="h-4 w-4" />
-                </span>
-              </div>
-            </article>
-          ))}
+      <div className="mx-auto max-w-7xl space-y-4">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <StatCard label="Commandes" value={stats.total} icon={faClipboardCheck} />
+          <StatCard label="Paiements attente" value={stats.paymentPending} icon={faClock} tone="amber" />
+          <StatCard label="Paiements valides" value={stats.validated} icon={faCheck} tone="green" />
+          <StatCard label="Commandes pretes" value={stats.ready} icon={faBoxOpen} tone="teal" />
+          <StatCard label="Livraisons actives" value={stats.deliveries} icon={faTruckFast} tone="blue" />
         </section>
 
-        {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
-            {error}
+        {(error || success) && (
+          <div
+            className={`rounded-2xl border px-4 py-3 text-sm font-bold ${
+              error
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-[#2FA6A3]/30 bg-[#2FA6A3]/10 text-[#167769]"
+            }`}
+          >
+            {error || success}
           </div>
         )}
 
-        {successMessage && (
-          <div className="rounded-xl border border-[#2FA6A3]/30 bg-[#2FA6A3]/10 px-4 py-3 text-sm font-semibold text-[#2FA6A3]">
-            {successMessage}
+        <section className="rounded-2xl border border-[#E2E8F2] bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-[#E2E8F2] p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-[#2FA6A3]">
+                Gestion commandes
+              </p>
+              <h2 className="mt-1 text-xl font-black text-[#1C2B4A]">
+                Paiements et reservations
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={loadOrders}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#D8E3EE] bg-white px-4 py-2 text-sm font-black text-[#2F6E9E] transition hover:bg-[#F8FAFC] disabled:opacity-60"
+            >
+              <FontAwesomeIcon icon={faRotate} spin={loading} />
+              Actualiser
+            </button>
           </div>
-        )}
 
-        <Card hover={false} className="overflow-hidden p-0" bodyClassName="p-0">
-          <div className="border-b border-[#E2E8F2] px-3 py-2.5">
-            <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0">
-              {filters.map((filter) => (
+          <div className="border-b border-[#E2E8F2] px-4 py-3">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {paymentFilters.map((item) => (
                 <button
-                  key={filter.value}
+                  key={item.value}
                   type="button"
-                  onClick={() => setStatusFilter(filter.value)}
-                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${
-                    statusFilter === filter.value
+                  onClick={() => setFilter(item.value)}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition ${
+                    filter === item.value
                       ? "bg-[#2F6E9E] text-white shadow-sm"
-                      : "bg-[#2F6E9E]/8 text-[#2F6E9E] hover:bg-[#2F6E9E]/14"
+                      : "bg-[#F1F5F9] text-[#6B7280] hover:bg-[#E8EEF5]"
                   }`}
                 >
-                  {filter.label}
+                  {item.label}
                 </button>
               ))}
             </div>
           </div>
 
           {loading ? (
-            <div className="px-4 py-8 text-center text-sm text-[#6B7280]">
-              Chargement des reservations...
+            <div className="p-8 text-center text-sm font-semibold text-[#6B7280]">
+              Chargement des commandes...
             </div>
-          ) : filteredReservations.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-[#6B7280]">
-              Aucune reservation a afficher.
+          ) : visibleOrders.length === 0 ? (
+            <div className="p-8 text-center text-sm font-semibold text-[#6B7280]">
+              Aucune commande dans cette categorie.
             </div>
           ) : (
-            <>
-              <div className="hidden overflow-x-auto md:block">
-                <table className="min-w-full">
-                  <thead className="bg-[#F8FAFC]">
-                    <tr className="text-left text-xs font-bold uppercase tracking-[0.08em] text-[#6B7280]">
-                      <th className="px-4 py-3">Reservation</th>
-                      <th className="px-4 py-3">Client</th>
-                      <th className="px-4 py-3">Medicaments</th>
-                      <th className="px-4 py-3">Date</th>
-                      <th className="px-4 py-3">Total</th>
-                      <th className="px-4 py-3">Statut</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="bg-[#F8FAFC]">
+                  <tr className="text-left text-xs font-black uppercase tracking-[0.08em] text-[#6B7280]">
+                    <th className="px-4 py-3">Commande</th>
+                    <th className="px-4 py-3">Client</th>
+                    <th className="px-4 py-3">Medicaments</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">Paiement</th>
+                    <th className="px-4 py-3">Total</th>
+                    <th className="px-4 py-3">Statut</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleOrders.map((order) => (
+                    <tr
+                      key={order.id}
+                      className="border-t border-[#E2E8F2] text-sm transition hover:bg-[#F8FAFC]"
+                    >
+                      <td className="px-4 py-3">
+                        <p className="font-black text-[#2F6E9E]">#{order.reservation}</p>
+                        <p className="text-xs font-semibold text-[#6B7280]">
+                          {dateTime(order.reservation_created_at || order.date_creation)}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-bold text-[#1C2B4A]">
+                          {order.client_name || order.user_name || `Client #${order.user}`}
+                        </p>
+                        <p className="text-xs font-semibold text-[#6B7280]">
+                          {order.client_phone || "-"}
+                        </p>
+                      </td>
+                      <td className="max-w-xs px-4 py-3">
+                        <p className="truncate font-semibold text-[#6B7280]">
+                          {getItemsSummary(order)}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-2 rounded-full bg-[#2FA6A3]/10 px-3 py-1 text-xs font-black text-[#167769]">
+                          <FontAwesomeIcon icon={order.reservation_type === "livraison" ? faMotorcycle : faBoxOpen} />
+                          {typeLabel(order.reservation_type)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge value={order.statut} config={paymentStatus} />
+                        <p className="mt-1 text-xs font-semibold text-[#6B7280]">
+                          {order.payment_method_name || order.method}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 font-black text-[#1C2B4A]">
+                        {money(order.montant_total)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge value={order.reservation_status} config={orderStatus} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrder(order)}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#2F6E9E]/10 text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white"
+                            aria-label="Voir detail commande"
+                          >
+                            <FontAwesomeIcon icon={faEye} />
+                          </button>
+                          {order.capture_paiement_url && (
+                            <a
+                              href={order.capture_paiement_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#2FA6A3]/10 text-[#167769] transition hover:bg-[#2FA6A3] hover:text-white"
+                              aria-label="Voir capture paiement"
+                            >
+                              <FontAwesomeIcon icon={faImage} />
+                            </a>
+                          )}
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {filteredReservations.map((reservation) => (
-                      <Fragment key={reservation.id}>
-                        <tr
-                          className="border-t border-[#E2E8F2] text-sm text-[#1C2B4A] transition hover:bg-[#F8FAFC]"
-                        >
-                          <td className="px-4 py-2.5 font-bold text-[#2F6E9E]">
-                            #{reservation.id}
-                          </td>
-                          <td className="px-4 py-2.5 font-semibold">
-                            {reservation.user_username || "Client"}
-                          </td>
-                          <td className="max-w-xs px-4 py-2.5">
-                            <p className="truncate text-[#6B7280]">
-                              {getItemsSummary(reservation)}
-                            </p>
-                          </td>
-                          <td className="px-4 py-2.5 font-semibold">
-                            {formatDate(reservation.date_reservation)}
-                          </td>
-                          <td className="px-4 py-2.5 font-bold">
-                            {formatTotal(reservation.total)}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <StatusBadge status={reservation.statut} />
-                          </td>
-                          <td className="px-4 py-2.5">{renderActions(reservation)}</td>
-                        </tr>
-                        {expandedId === reservation.id && (
-                          <tr>
-                            <td colSpan="7" className="border-t border-[#E2E8F2] bg-[#F8FAFC] px-4 py-3">
-                              <p className="text-xs font-bold text-[#1C2B4A]">
-                                Medicaments reserves
-                              </p>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {(reservation.items || []).map((item) => (
-                                  <span
-                                    key={item.id}
-                                    className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#6B7280]"
-                                  >
-                                    {item.medicament_nom} x{item.quantite}
-                                  </span>
-                                ))}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="grid gap-2 p-3 md:hidden">
-                {filteredReservations.map((reservation) => (
-                  <article
-                    key={reservation.id}
-                    className="rounded-xl border border-[#E2E8F2] bg-white px-3 py-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="text-sm font-bold text-[#2F6E9E]">
-                          Reservation #{reservation.id}
-                        </h3>
-                        <p className="mt-1 text-xs font-semibold text-[#1C2B4A]">
-                          {reservation.user_username || "Client"}
-                        </p>
-                      </div>
-                      {renderActions(reservation)}
-                    </div>
-                    <p className="mt-2 truncate text-xs text-[#6B7280]">
-                      {getItemsSummary(reservation)}
-                    </p>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <p className="font-semibold text-[#6B7280]">Date</p>
-                        <p className="font-black text-[#1C2B4A]">
-                          {formatDate(reservation.date_reservation)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="font-semibold text-[#6B7280]">Total</p>
-                        <p className="font-black text-[#1C2B4A]">
-                          {formatTotal(reservation.total)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-3">
-                      <StatusBadge status={reservation.statut} />
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </>
-          )}
-
-          <div className="flex items-center justify-end gap-3 border-t border-[#E2E8F2] bg-[#F8FAFC] px-3 py-2">
-            <p className="text-xs font-semibold text-[#6B7280]">
-              Page {pagination.currentPage} sur {totalPages}
-            </p>
-            <div className="flex gap-1.5">
-              <button
-                type="button"
-                disabled={!pagination.previous || loading}
-                onClick={() => loadReservations(pagination.currentPage - 1)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#2F6E9E]/15 bg-white text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#2F6E9E]"
-                aria-label="Page precedente"
-              >
-                <FontAwesomeIcon icon={faChevronLeft} className="h-3 w-3" />
-              </button>
-              <button
-                type="button"
-                disabled={!pagination.next || loading}
-                onClick={() => loadReservations(pagination.currentPage + 1)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#2F6E9E]/15 bg-white text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white disabled:hover:text-[#2F6E9E]"
-                aria-label="Page suivante"
-              >
-                <FontAwesomeIcon icon={faChevronRight} className="h-3 w-3" />
-              </button>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-        </Card>
+          )}
+        </section>
       </div>
+
+      {selectedOrder && (
+        <OrderDetailModal
+          order={selectedOrder}
+          actionLoading={actionLoadingId === selectedOrder.id}
+          onClose={() => setSelectedOrder(null)}
+          onValidate={() =>
+            runAction(
+              selectedOrder,
+              validatePayment,
+              "Paiement valide. Une transaction financiere a ete creee."
+            )
+          }
+          onReject={() => handleReject(selectedOrder)}
+          onConfirm={() =>
+            runAction(selectedOrder, confirmOrder, "Commande confirmee.", {
+              closeDetail: true,
+            })
+          }
+          onPrepare={() =>
+            runAction(selectedOrder, prepareOrder, "Commande en preparation.", {
+              closeDetail: true,
+            })
+          }
+          onReady={() =>
+            runAction(selectedOrder, markOrderReady, "Commande marquee comme prete.", {
+              closeDetail: true,
+            })
+          }
+          onDelivered={() =>
+            runAction(selectedOrder, markOrderDelivered, "Commande marquee comme livree.", {
+              closeDetail: true,
+            })
+          }
+        />
+      )}
     </DashboardLayout>
+  );
+}
+
+function StatCard({ label, value, icon, tone = "blue" }) {
+  const toneClass = {
+    blue: "bg-[#2F6E9E]/10 text-[#2F6E9E]",
+    teal: "bg-[#2FA6A3]/10 text-[#167769]",
+    green: "bg-emerald-50 text-emerald-700",
+    amber: "bg-amber-50 text-amber-700",
+  }[tone];
+
+  return (
+    <article className="rounded-2xl border border-[#E2E8F2] bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-2xl font-black text-[#1C2B4A]">{value}</p>
+          <p className="mt-1 text-xs font-bold text-[#6B7280]">{label}</p>
+        </div>
+        <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${toneClass}`}>
+          <FontAwesomeIcon icon={icon} />
+        </span>
+      </div>
+    </article>
+  );
+}
+
+function OrderDetailModal({
+  order,
+  actionLoading,
+  onClose,
+  onValidate,
+  onReject,
+  onConfirm,
+  onPrepare,
+  onReady,
+  onDelivered,
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1C2B4A]/45 p-4 backdrop-blur-sm">
+      <section className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl">
+        <div className="flex flex-col gap-3 border-b border-[#E2E8F2] pb-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.14em] text-[#2FA6A3]">
+              Commande #{order.reservation}
+            </p>
+            <h3 className="mt-1 text-2xl font-black text-[#1C2B4A]">
+              {order.client_name || order.user_name || `Client #${order.user}`}
+            </h3>
+            <p className="mt-1 text-sm font-semibold text-[#6B7280]">
+              {dateTime(order.reservation_created_at || order.date_creation)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-black text-[#1C2B4A]"
+          >
+            Fermer
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="space-y-4">
+            <InfoPanel title="Medicaments commandes">
+              <div className="space-y-2">
+                {(order.items || []).map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between gap-3 rounded-2xl bg-[#F8FAFC] px-3 py-2"
+                  >
+                    <div>
+                      <p className="font-black text-[#1C2B4A]">{item.medicament_nom}</p>
+                      <p className="text-xs font-semibold text-[#6B7280]">
+                        {item.quantite} x {money(item.prix_unitaire)}
+                      </p>
+                    </div>
+                    <p className="font-black text-[#2F6E9E]">{money(item.sous_total)}</p>
+                  </div>
+                ))}
+                {(order.items || []).length === 0 && (
+                  <p className="text-sm font-semibold text-[#6B7280]">
+                    Aucun medicament detaille.
+                  </p>
+                )}
+              </div>
+            </InfoPanel>
+
+            {order.delivery && (
+              <InfoPanel title="Livraison">
+                <div className="flex items-start gap-3 rounded-2xl bg-[#F8FAFC] p-3">
+                  <FontAwesomeIcon icon={faLocationDot} className="mt-1 text-[#2FA6A3]" />
+                  <div>
+                    <p className="font-black text-[#1C2B4A]">{order.delivery.address}</p>
+                    <p className="text-sm font-semibold text-[#6B7280]">
+                      Tel: {order.delivery.phone || "-"}
+                    </p>
+                    {order.delivery.note && (
+                      <p className="mt-1 text-sm font-semibold text-[#6B7280]">
+                        Note: {order.delivery.note}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </InfoPanel>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <InfoPanel title="Paiement">
+              <div className="space-y-3">
+                <Row label="Methode" value={order.payment_method_name || order.method} />
+                <Row label="Telephone client" value={order.client_phone || "-"} />
+                <Row label="Transaction ID" value={order.reference_paiement || "-"} />
+                <Row label="Medicaments" value={money(order.montant_medicaments)} />
+                <Row label="Livraison" value={money(order.frais_livraison)} />
+                <Row label="Total" value={money(order.montant_total)} strong />
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Badge value={order.statut} config={paymentStatus} />
+                  <Badge value={order.reservation_status} config={orderStatus} />
+                </div>
+                {order.capture_paiement_url && (
+                  <a
+                    href={order.capture_paiement_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#2FA6A3] px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-[#238987]"
+                  >
+                    <FontAwesomeIcon icon={faImage} />
+                    Voir la capture de paiement
+                  </a>
+                )}
+              </div>
+            </InfoPanel>
+
+            <InfoPanel title="Actions">
+              <div className="grid gap-2">
+                {order.statut === "en_attente_verification" && (
+                  <>
+                    <ActionButton
+                      label="Valider paiement"
+                      icon={faCheck}
+                      loading={actionLoading}
+                      onClick={onValidate}
+                    />
+                    <ActionButton
+                      label="Refuser paiement"
+                      icon={faTimes}
+                      tone="danger"
+                      loading={actionLoading}
+                      onClick={onReject}
+                    />
+                  </>
+                )}
+                {order.statut === "valide" && order.reservation_status === "en_attente" && (
+                  <ActionButton
+                    label="Confirmer commande"
+                    icon={faClipboardCheck}
+                    loading={actionLoading}
+                    onClick={onConfirm}
+                  />
+                )}
+                {order.reservation_status === "confirmee" && (
+                  <ActionButton
+                    label="Mettre en preparation"
+                    icon={faTruckFast}
+                    loading={actionLoading}
+                    onClick={onPrepare}
+                  />
+                )}
+                {order.reservation_status === "en_preparation" && (
+                  <ActionButton
+                    label="Marquer prete"
+                    icon={faBoxOpen}
+                    loading={actionLoading}
+                    onClick={onReady}
+                  />
+                )}
+                {order.reservation_status === "prete" && (
+                  <ActionButton
+                    label="Marquer livree"
+                    icon={faCheck}
+                    loading={actionLoading}
+                    onClick={onDelivered}
+                  />
+                )}
+                {order.statut !== "en_attente_verification" &&
+                  !(
+                    order.statut === "valide" &&
+                    ["en_attente", "confirmee", "en_preparation", "prete"].includes(
+                      order.reservation_status
+                    )
+                  ) && (
+                    <p className="rounded-xl bg-[#F8FAFC] px-3 py-3 text-sm font-semibold text-[#6B7280]">
+                      Aucune action disponible pour ce statut.
+                    </p>
+                  )}
+              </div>
+            </InfoPanel>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function InfoPanel({ title, children }) {
+  return (
+    <section className="rounded-2xl border border-[#E2E8F2] bg-white p-4 shadow-sm">
+      <h4 className="mb-3 text-sm font-black uppercase tracking-[0.1em] text-[#6B7280]">
+        {title}
+      </h4>
+      {children}
+    </section>
+  );
+}
+
+function Row({ label, value, strong = false }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-[#EEF2F6] pb-2 last:border-b-0 last:pb-0">
+      <span className="text-sm font-semibold text-[#6B7280]">{label}</span>
+      <span className={`text-right text-sm ${strong ? "font-black text-[#1C2B4A]" : "font-bold text-[#1C2B4A]"}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function ActionButton({ label, icon, tone = "primary", loading, onClick }) {
+  const classes =
+    tone === "danger"
+      ? "bg-red-600 hover:bg-red-700"
+      : "bg-[#2F6E9E] hover:bg-[#255879]";
+
+  return (
+    <button
+      type="button"
+      disabled={loading}
+      onClick={onClick}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-60 ${classes}`}
+    >
+      <FontAwesomeIcon icon={icon} />
+      {loading ? "Traitement..." : label}
+    </button>
   );
 }
 

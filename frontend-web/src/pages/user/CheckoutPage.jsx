@@ -204,7 +204,10 @@ function CheckoutPage() {
         setDraftQuantities(nextDrafts);
         setPaymentMethods(paymentData.methods || []);
         setPaymentMethodsError(paymentData.loadError || "");
-        setPaymentMethodsMessage(paymentData.message || "");
+        setPaymentMethodsMessage(
+          paymentData.message ||
+            "Aucun mode de paiement n'a encore ete configure par cette pharmacie."
+        );
         setSelectedPaymentMethod(
           (paymentData.methods || []).find((method) => method.configured) || null
         );
@@ -657,10 +660,12 @@ function CheckoutPage() {
 
                   {!paymentMethodsError &&
                     !paymentMethods.some((method) => method.configured) && (
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700">
-                    {paymentMethodsMessage ||
-                        "Cette pharmacie n'a pas encore configuré ses modes de paiement."}
-                    </div>
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-700">
+                        <p>{paymentMethodsMessage}</p>
+                        <p className="mt-1 text-xs font-medium text-amber-700/80">
+                          Veuillez contacter la pharmacie ou reessayer plus tard.
+                        </p>
+                      </div>
                   )}
 
                   {paymentMethods.length > 0 &&

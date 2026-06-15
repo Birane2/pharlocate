@@ -1,6 +1,11 @@
 from django.contrib import admin
 
-from .models import PharmacySubscription, SubscriptionPlan
+from .models import (
+    PharmacySubscription,
+    PlatformPaymentMethod,
+    SubscriptionPayment,
+    SubscriptionPlan,
+)
 
 
 @admin.register(SubscriptionPlan)
@@ -31,3 +36,27 @@ class PharmacySubscriptionAdmin(admin.ModelAdmin):
     search_fields = ('pharmacy__nom', 'plan__nom', 'plan__code')
     readonly_fields = ('date_creation',)
     autocomplete_fields = ('pharmacy', 'plan', 'payment', 'transaction')
+
+
+@admin.register(PlatformPaymentMethod)
+class PlatformPaymentMethodAdmin(admin.ModelAdmin):
+    list_display = ('display_beneficiary_name', 'is_active', 'updated_at')
+    list_filter = ('is_active',)
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(SubscriptionPayment)
+class SubscriptionPaymentAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'pharmacy',
+        'subscription',
+        'amount',
+        'payment_method',
+        'status',
+        'created_at',
+    )
+    list_filter = ('status', 'payment_method', 'created_at')
+    search_fields = ('pharmacy__nom', 'transaction_id', 'subscription__plan__nom')
+    readonly_fields = ('created_at', 'validated_at')
+    autocomplete_fields = ('pharmacy', 'subscription', 'validated_by')

@@ -34,8 +34,14 @@ import FinanceTransactions from "./pages/pharmacien/FinanceTransactions";
 import PharmacienPayments from "./pages/pharmacien/PharmacienPayments";
 import PaymentMethodsConfig from "./pages/pharmacien/PaymentMethodsConfig";
 import Subscription from "./pages/pharmacien/Subscription";
+import SubscriptionPayment from "./pages/pharmacien/SubscriptionPayment";
+import Deliveries from "./pages/pharmacien/Deliveries";
 import AdminFinance from "./pages/admin/AdminFinance";
 import AdminFinanceList from "./pages/admin/AdminFinanceList";
+import AdminPayments from "./pages/admin/AdminPayments";
+import AdminPlatformPaymentMethods from "./pages/admin/AdminPlatformPaymentMethods";
+import AdminSubscriptionPayments from "./pages/admin/AdminSubscriptionPayments";
+import AdminTransactions from "./pages/admin/AdminTransactions";
 
 function App() {
   return (
@@ -280,6 +286,17 @@ function App() {
       />
 
       <Route
+        path="/pharmacien/orders"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <PharmacienPayments />
+            </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/pharmacien/payments"
         element={
           <ProtectedRoute allowedRoles={["pharmacien"]}>
@@ -302,11 +319,33 @@ function App() {
       />
 
       <Route
+        path="/pharmacien/deliveries"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <Deliveries />
+            </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/pharmacien/subscription"
         element={
           <ProtectedRoute allowedRoles={["pharmacien"]}>
             <PharmacistPharmacyGate>
               <Subscription />
+            </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/pharmacien/subscription/payment"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <SubscriptionPayment />
             </PharmacistPharmacyGate>
           </ProtectedRoute>
         }
@@ -325,7 +364,7 @@ function App() {
         path="/admin/transactions"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
-            <AdminFinanceList type="transactions" title="Transactions globales" />
+            <AdminTransactions />
           </ProtectedRoute>
         }
       />
@@ -334,7 +373,25 @@ function App() {
         path="/admin/payments"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
-            <AdminFinanceList type="payments" title="Gestion paiements" />
+            <AdminPayments />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/payment-methods"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminPlatformPaymentMethods />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/subscription-payments"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminSubscriptionPayments />
           </ProtectedRoute>
         }
       />

@@ -47,6 +47,10 @@ class PharmacyPaymentMethodSerializer(serializers.ModelSerializer):
 class PaymentSerializer(serializers.ModelSerializer):
     pharmacy_name = serializers.CharField(source='pharmacy.nom', read_only=True)
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    payment_method_name = serializers.CharField(
+        source='payment_method.nom',
+        read_only=True,
+    )
     method = serializers.SlugRelatedField(
         source='payment_method',
         queryset=PaymentMethod.objects.filter(est_actif=True),
@@ -59,6 +63,11 @@ class PaymentSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     payment_proof_url = serializers.SerializerMethodField()
+    capture_paiement_url = serializers.SerializerMethodField()
+    reference_paiement = serializers.CharField(
+        source='transaction_id',
+        read_only=True,
+    )
     amount = serializers.DecimalField(
         source='montant_total',
         max_digits=12,
@@ -66,6 +75,7 @@ class PaymentSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     status = serializers.CharField(source='statut', read_only=True)
+    statut = serializers.CharField(read_only=True)
     verified_by = serializers.PrimaryKeyRelatedField(
         source='valide_par',
         read_only=True,
@@ -75,6 +85,18 @@ class PaymentSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     rejection_reason = serializers.CharField(source='motif_refus', read_only=True)
+    client_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    reservation_status = serializers.CharField(source='reservation.statut', read_only=True)
+    reservation_type = serializers.CharField(
+        source='reservation.type_reservation',
+        read_only=True,
+    )
+    reservation_created_at = serializers.DateTimeField(
+        source='reservation.date_reservation',
+        read_only=True,
+    )
+    items = serializers.SerializerMethodField()
+    delivery = serializers.SerializerMethodField()
 
     class Meta:
         model = Payment
@@ -85,20 +107,30 @@ class PaymentSerializer(serializers.ModelSerializer):
             'pharmacy_name',
             'user',
             'user_name',
+            'client_name',
             'method',
+            'payment_method_name',
             'client_phone',
             'transaction_id',
+            'reference_paiement',
             'payment_proof',
             'payment_proof_url',
+            'capture_paiement_url',
             'amount',
             'montant_medicaments',
             'frais_livraison',
             'montant_total',
             'status',
+            'statut',
             'verified_by',
             'verified_at',
             'rejection_reason',
             'date_creation',
+            'reservation_status',
+            'reservation_type',
+            'reservation_created_at',
+            'items',
+            'delivery',
         ]
         read_only_fields = [
             'id',
@@ -126,6 +158,38 @@ class PaymentSerializer(serializers.ModelSerializer):
 
         return None
 
+    def get_capture_paiement_url(self, obj):
+        return self.get_payment_proof_url(obj)
+
+    def get_items(self, obj):
+        return [
+            {
+                'id': item.id,
+                'medicament': item.medicament_id,
+                'medicament_nom': item.medicament.nom,
+                'quantite': item.quantite,
+                'prix_unitaire': item.prix_unitaire,
+                'sous_total': item.sous_total,
+            }
+            for item in obj.reservation.items.select_related('medicament').all()
+        ]
+
+    def get_delivery(self, obj):
+        delivery = getattr(obj.reservation, 'delivery', None)
+        if not delivery:
+            return None
+
+        return {
+            'id': delivery.id,
+            'address': delivery.adresse_livraison,
+            'phone': delivery.telephone,
+            'note': delivery.note,
+            'fee': delivery.frais_livraison,
+            'status': delivery.statut,
+            'latitude': delivery.latitude,
+            'longitude': delivery.longitude,
+        }
+
     def validate(self, attrs):
         payment_method = attrs.get('payment_method')
         transaction_id = attrs.get('transaction_id')
@@ -143,3 +207,27 @@ class PaymentSerializer(serializers.ModelSerializer):
                 })
 
         return attrs
+
+
+class AdminPaymentSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    source_id = serializers.IntegerField()
+    payment_type = serializers.CharField()
+    reference = serializers.CharField()
+    user_name = serializers.CharField()
+    pharmacy_id = serializers.IntegerField(allow_null=True)
+    pharmacy_name = serializers.CharField()
+    reservation_id = serializers.IntegerField(allow_null=True)
+    subscription_id = serializers.IntegerField(allow_null=True)
+    payment_method = serializers.CharField()
+    transaction_id = serializers.CharField()
+    client_phone = serializers.CharField(allow_blank=True)
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    amount_medicines = serializers.DecimalField(max_digits=12, decimal_places=2)
+    delivery_fee = serializers.DecimalField(max_digits=12, decimal_places=2)
+    status = serializers.CharField()
+    rejection_reason = serializers.CharField(allow_blank=True)
+    proof_image_url = serializers.CharField(allow_blank=True, allow_null=True)
+    validated_by = serializers.CharField(allow_blank=True)
+    validated_at = serializers.DateTimeField(allow_null=True)
+    created_at = serializers.DateTimeField()

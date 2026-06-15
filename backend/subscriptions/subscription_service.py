@@ -70,10 +70,18 @@ def _subscription_price(plan):
     return plan.prix_mensuel if plan.prix_mensuel > 0 else plan.prix_annuel
 
 
+def get_subscription_amount(plan):
+    return _subscription_price(plan)
+
+
 @transaction.atomic
 def activate_subscription(subscription, activated_by=None):
     if not subscription.plan.is_free and not subscription.payment_id:
-        raise ValidationError('Un abonnement payant necessite un paiement valide.')
+        has_valid_subscription_payment = subscription.subscription_payments.filter(
+            status='valide',
+        ).exists()
+        if not has_valid_subscription_payment:
+            raise ValidationError('Un abonnement payant necessite un paiement valide.')
 
     if subscription.payment_id and subscription.payment.statut != Payment.STATUS_VALIDATED:
         raise ValidationError('Le paiement associe doit etre valide.')
@@ -106,6 +114,55 @@ def activate_subscription(subscription, activated_by=None):
 
     subscription.save()
     return subscription
+
+
+@transaction.atomic
+def validate_subscription_payment(subscription_payment, admin_user):
+    if subscription_payment.status != subscription_payment.STATUS_PENDING:
+        raise ValidationError('Ce paiement abonnement a deja ete traite.')
+
+    subscription_payment.status = subscription_payment.STATUS_VALIDATED
+    subscription_payment.validated_by = admin_user
+    subscription_payment.validated_at = timezone.now()
+    subscription_payment.rejection_reason = ''
+    subscription_payment.save(
+        update_fields=['status', 'validated_by', 'validated_at', 'rejection_reason']
+    )
+
+    subscription = subscription_payment.subscription
+    PharmacySubscription.objects.filter(
+        pharmacy=subscription.pharmacy,
+        statut=PharmacySubscription.STATUS_ACTIVE,
+    ).exclude(pk=subscription.pk).update(statut=PharmacySubscription.STATUS_EXPIRED)
+
+    subscription.statut = PharmacySubscription.STATUS_ACTIVE
+    subscription.date_debut = timezone.now()
+    subscription.date_fin = (
+        None if subscription.plan.is_free else subscription.date_debut + timezone.timedelta(
+            days=subscription.plan.duree_jours,
+        )
+    )
+    subscription.save(update_fields=['statut', 'date_debut', 'date_fin'])
+    return subscription_payment
+
+
+@transaction.atomic
+def reject_subscription_payment(subscription_payment, admin_user, reason=''):
+    if subscription_payment.status != subscription_payment.STATUS_PENDING:
+        raise ValidationError('Ce paiement abonnement a deja ete traite.')
+
+    subscription_payment.status = subscription_payment.STATUS_REJECTED
+    subscription_payment.validated_by = admin_user
+    subscription_payment.validated_at = timezone.now()
+    subscription_payment.rejection_reason = reason
+    subscription_payment.save(
+        update_fields=['status', 'validated_by', 'validated_at', 'rejection_reason']
+    )
+
+    subscription = subscription_payment.subscription
+    subscription.statut = PharmacySubscription.STATUS_REJECTED
+    subscription.save(update_fields=['statut'])
+    return subscription_payment
 
 
 @transaction.atomic

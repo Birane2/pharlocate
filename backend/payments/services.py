@@ -100,6 +100,7 @@ def validate_payment(payment, validated_by):
 
     payment.statut = Payment.STATUS_VALIDATED
     payment.valide_par = validated_by
+    payment.date_validation = timezone.now()
     payment.motif_refus = ''
     payment.save()
 
@@ -128,6 +129,7 @@ def reject_payment(payment, rejected_by, motif_refus):
 
     payment.statut = Payment.STATUS_REJECTED
     payment.valide_par = rejected_by
+    payment.date_validation = timezone.now()
     payment.motif_refus = motif_refus.strip()
     payment.save()
 
