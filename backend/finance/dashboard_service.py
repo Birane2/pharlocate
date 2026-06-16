@@ -11,7 +11,7 @@ from payments.models import Payment
 from pharmacies.models import Pharmacy
 from refunds.models import Refund
 from reservations.models import Reservation
-from subscriptions.models import PharmacySubscription
+from subscriptions.models import PharmacySubscription, SubscriptionPayment, SubscriptionRefund
 from transactions.models import Transaction
 
 
@@ -133,6 +133,25 @@ def get_subscription_stats(subscription_queryset):
     }
 
 
+def get_subscription_payment_stats(subscription_payment_queryset):
+    return {
+        'total': subscription_payment_queryset.count(),
+        'valides': subscription_payment_queryset.filter(
+            status=SubscriptionPayment.STATUS_VALIDATED,
+        ).count(),
+        'en_attente': subscription_payment_queryset.filter(
+            status=SubscriptionPayment.STATUS_PENDING,
+        ).count(),
+        'refuses': subscription_payment_queryset.filter(
+            status=SubscriptionPayment.STATUS_REJECTED,
+        ).count(),
+        'revenu_valide': sum_money(
+            subscription_payment_queryset.filter(status=SubscriptionPayment.STATUS_VALIDATED),
+            'amount',
+        ),
+    }
+
+
 def revenue_by_day(transaction_queryset):
     return [
         {
@@ -214,11 +233,18 @@ def get_pharmacist_dashboard(pharmacy, params):
     )
 
     active_subscription = (
-        pharmacy.subscriptions.filter(statut=PharmacySubscription.STATUS_ACTIVE)
+        pharmacy.subscriptions.filter(is_current=True)
         .select_related('plan')
         .order_by('-date_debut')
         .first()
     )
+    if not active_subscription:
+        active_subscription = (
+            pharmacy.subscriptions.filter(statut=PharmacySubscription.STATUS_ACTIVE)
+            .select_related('plan')
+            .order_by('-date_debut')
+            .first()
+        )
 
     return {
         'pharmacy': {
@@ -244,7 +270,11 @@ def get_pharmacist_dashboard(pharmacy, params):
             'livraisons_en_cours': get_delivery_stats(filtered_deliveries)['en_cours'],
             'livraisons_terminees': get_delivery_stats(filtered_deliveries)['terminees'],
             'abonnement_actuel': active_subscription.plan.nom if active_subscription else None,
+            'commission_rate': active_subscription.plan.commission_rate if active_subscription else None,
+            'statut_abonnement': active_subscription.statut if active_subscription else None,
             'date_expiration_abonnement': active_subscription.date_fin if active_subscription else None,
+            'total_transactions': filtered_transactions.count(),
+            'total_payments': filtered_payments.count(),
         },
         'payments': get_payment_stats(filtered_payments),
         'revenues': get_revenue_stats(filtered_transactions),
@@ -264,26 +294,52 @@ def get_admin_dashboard(params):
     transaction_queryset = Transaction.objects.all()
     payment_queryset = Payment.objects.all()
     refund_queryset = Refund.objects.all()
+    subscription_payment_queryset = SubscriptionPayment.objects.all()
+    subscription_refund_queryset = SubscriptionRefund.objects.all()
     subscription_queryset = PharmacySubscription.objects.all()
     delivery_queryset = Delivery.objects.all()
 
     filtered_transactions = apply_date_filter(transaction_queryset, 'date_creation', date_range)
     filtered_payments = apply_date_filter(payment_queryset, 'date_creation', date_range)
     filtered_refunds = apply_date_filter(refund_queryset, 'date_demande', date_range)
+    filtered_subscription_payments = apply_date_filter(
+        subscription_payment_queryset,
+        'created_at',
+        date_range,
+    )
+    filtered_subscription_refunds = apply_date_filter(
+        subscription_refund_queryset,
+        'created_at',
+        date_range,
+    )
     filtered_subscriptions = apply_date_filter(subscription_queryset, 'date_creation', date_range)
     filtered_deliveries = apply_date_filter(delivery_queryset, 'date_creation', date_range)
 
-    subscription_transactions = filtered_transactions.filter(
-        type_transaction=Transaction.TYPE_SUBSCRIPTION
+    valid_subscription_payments = filtered_subscription_payments.filter(
+        status=SubscriptionPayment.STATUS_VALIDATED,
+    )
+    processed_subscription_refunds = filtered_subscription_refunds.filter(
+        status=SubscriptionRefund.STATUS_PROCESSED,
     )
 
     return {
         'summary': {
             'revenu_total_plateforme': sum_money(filtered_transactions, 'montant_brut'),
             'total_commissions': sum_money(filtered_transactions, 'commission'),
-            'total_remboursements': sum_money(
+            'total_remboursements_commandes': sum_money(
                 filtered_refunds.filter(statut=Refund.STATUS_EXECUTED),
                 'montant_approuve',
+            ),
+            'total_remboursements_abonnements': sum_money(
+                processed_subscription_refunds,
+                'amount',
+            ),
+            'total_remboursements': (
+                sum_money(
+                    filtered_refunds.filter(statut=Refund.STATUS_EXECUTED),
+                    'montant_approuve',
+                )
+                + sum_money(processed_subscription_refunds, 'amount')
             ),
             'nombre_transactions': filtered_transactions.count(),
             'nombre_paiements': filtered_payments.count(),
@@ -295,10 +351,17 @@ def get_admin_dashboard(params):
             'nombre_abonnements_actifs': filtered_subscriptions.filter(
                 statut=PharmacySubscription.STATUS_ACTIVE
             ).count(),
-            'revenu_abonnements': sum_money(subscription_transactions, 'montant_brut'),
+            'revenu_abonnements': sum_money(valid_subscription_payments, 'amount'),
+            'paiements_abonnements_en_attente': filtered_subscription_payments.filter(
+                status=SubscriptionPayment.STATUS_PENDING,
+            ).count(),
+            'remboursements_abonnements_demandes': filtered_subscription_refunds.filter(
+                status=SubscriptionRefund.STATUS_REQUESTED,
+            ).count(),
             'livraisons_totales': filtered_deliveries.count(),
         },
         'payments': get_payment_stats(filtered_payments),
+        'subscription_payments': get_subscription_payment_stats(filtered_subscription_payments),
         'deliveries': get_delivery_stats(filtered_deliveries),
         'subscriptions': get_subscription_stats(filtered_subscriptions),
         'charts': {

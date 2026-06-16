@@ -8,6 +8,10 @@ from subscriptions.views import (
     AdminSubscriptionPaymentListView,
     AdminSubscriptionPaymentRejectView,
     AdminSubscriptionPaymentValidateView,
+    AdminSubscriptionRefundApproveView,
+    AdminSubscriptionRefundListView,
+    AdminSubscriptionRefundProcessedView,
+    AdminSubscriptionRefundRejectView,
     PlatformPaymentMethodPublicView,
 )
 
@@ -23,6 +27,19 @@ urlpatterns = [
     path(
         'api/admin/subscription-payments/<int:pk>/reject/',
         AdminSubscriptionPaymentRejectView.as_view(),
+    ),
+    path('api/admin/subscription-refunds/', AdminSubscriptionRefundListView.as_view()),
+    path(
+        'api/admin/subscription-refunds/<int:pk>/approve/',
+        AdminSubscriptionRefundApproveView.as_view(),
+    ),
+    path(
+        'api/admin/subscription-refunds/<int:pk>/reject/',
+        AdminSubscriptionRefundRejectView.as_view(),
+    ),
+    path(
+        'api/admin/subscription-refunds/<int:pk>/processed/',
+        AdminSubscriptionRefundProcessedView.as_view(),
     ),
     path('api/admin/payments/', include('payments.admin_urls')),
     path('api/admin/', include('config.admin_urls')),

@@ -17,3 +17,12 @@ export function dateTime(value) {
     minute: "2-digit",
   }).format(new Date(value));
 }
+
+export function dateOnly(value) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}

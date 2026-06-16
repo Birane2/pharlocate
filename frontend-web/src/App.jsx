@@ -42,7 +42,12 @@ import AdminFinanceList from "./pages/admin/AdminFinanceList";
 import AdminPayments from "./pages/admin/AdminPayments";
 import AdminPlatformPaymentMethods from "./pages/admin/AdminPlatformPaymentMethods";
 import AdminSubscriptionPayments from "./pages/admin/AdminSubscriptionPayments";
+import AdminSubscriptionRefunds from "./pages/admin/AdminSubscriptionRefunds";
 import AdminTransactions from "./pages/admin/AdminTransactions";
+import AdminCommissionInvoices from "./pages/admin/AdminCommissionInvoices";
+import AdminCommissionInvoiceDetail from "./pages/admin/AdminCommissionInvoiceDetail";
+import CommissionInvoices from "./pages/pharmacien/CommissionInvoices";
+import CommissionInvoiceDetail from "./pages/pharmacien/CommissionInvoiceDetail";
 
 function App() {
   return (
@@ -416,6 +421,15 @@ function App() {
       />
 
       <Route
+        path="/admin/subscription-refunds"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminSubscriptionRefunds />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/admin/invoices"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
@@ -438,6 +452,66 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
             <AdminFinanceList type="subscriptions" title="Gestion abonnements" />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Commission invoices — admin */}
+      <Route
+        path="/admin/finance/commission-invoices"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminCommissionInvoices />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/finance/commission-invoices/:id"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminCommissionInvoiceDetail />
+          </ProtectedRoute>
+        }
+      />
+      {/* alias for old path */}
+      <Route
+        path="/admin/commission-invoices"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminCommissionInvoices />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Commission invoices — pharmacien */}
+      <Route
+        path="/pharmacien/finance/invoices"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <CommissionInvoices />
+            </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/pharmacien/finance/invoices/:id"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <CommissionInvoiceDetail />
+            </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+      {/* alias for old path */}
+      <Route
+        path="/pharmacien/commission-invoices"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <CommissionInvoices />
+            </PharmacistPharmacyGate>
           </ProtectedRoute>
         }
       />

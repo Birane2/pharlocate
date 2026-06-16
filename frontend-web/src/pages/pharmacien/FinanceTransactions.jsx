@@ -4,12 +4,9 @@ import { PageCard, StatusBadge } from "../finance/FinanceUI";
 import { dateTime, money } from "../finance/financeFormat";
 import { getPharmacienTransactions } from "../../services/financeService";
 
-import { useLocation } from "react-router-dom";
 
 function FinanceTransactions() {
-  const location = useLocation();
   // Debug temporaire (à supprimer après validation)
-  console.log(location.pathname);
   const [transactions, setTransactions] = useState([]);
 
   useEffect(() => {

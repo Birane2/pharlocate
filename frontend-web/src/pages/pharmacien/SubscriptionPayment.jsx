@@ -55,14 +55,16 @@ function SubscriptionPayment() {
       setError("Veuillez renseigner l'ID transaction.");
       return;
     }
+    if (!proofImage) {
+      setError("La capture du paiement est obligatoire.");
+      return;
+    }
 
     const formData = new FormData();
     formData.append("subscription", subscriptionId);
     formData.append("payment_method", selectedMethod);
     formData.append("transaction_id", transactionId.trim());
-    if (proofImage) {
-      formData.append("proof_image", proofImage);
-    }
+    formData.append("proof_image", proofImage);
 
     setSending(true);
     try {
@@ -145,14 +147,18 @@ function SubscriptionPayment() {
 
             <label>
               <span className="text-sm font-bold text-[#1C2B4A]">
-                Capture paiement
+                Capture paiement <span className="text-red-500">*</span>
               </span>
               <input
                 type="file"
                 accept="image/*"
+                required
                 onChange={(event) => setProofImage(event.target.files?.[0] || null)}
                 className="mt-2 w-full rounded-xl border border-[#DDEBF0] px-3 py-2 text-sm font-semibold"
               />
+              <p className="mt-1 text-xs text-[#9CA3AF]">
+                Screenshot ou photo du recu de paiement obligatoire.
+              </p>
             </label>
 
             {error && (

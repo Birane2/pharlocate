@@ -88,6 +88,12 @@ export const pharmacistLinks = [
     path: "/pharmacien/subscription",
     icon: faFileInvoice,
   },
+  {
+    label: "Factures commissions",
+    shortLabel: "Comm.",
+    path: "/pharmacien/finance/invoices",
+    icon: faFileInvoice,
+  },
 ];
 
 export const adminLinks = [
@@ -146,6 +152,12 @@ export const adminLinks = [
     icon: faMoneyBillTrendUp,
   },
   {
+    label: "Remb. abonnements",
+    shortLabel: "Sub ref.",
+    path: "/admin/subscription-refunds",
+    icon: faRotateLeft,
+  },
+  {
     label: "Factures",
     shortLabel: "Inv.",
     path: "/admin/invoices",
@@ -162,5 +174,11 @@ export const adminLinks = [
     shortLabel: "Sub.",
     path: "/admin/subscriptions",
     icon: faCalendarCheck,
+  },
+  {
+    label: "Factures commissions",
+    shortLabel: "Comm.",
+    path: "/admin/finance/commission-invoices",
+    icon: faFileInvoice,
   },
 ];

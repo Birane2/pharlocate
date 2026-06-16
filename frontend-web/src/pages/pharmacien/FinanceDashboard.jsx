@@ -3,7 +3,8 @@ import PharmacienLayout from "../../layouts/PharmacienLayout";
 import { StatCard, StatusBadge } from "../finance/FinanceUI";
 import { money } from "../finance/financeFormat";
 import { getPharmacienFinanceDashboard } from "../../services/financeService";
-import { useLocation, Link } from "react-router-dom";
+import { getMyCommissionInvoices } from "../../services/commissionInvoiceService";
+import { Link } from "react-router-dom";
 
 const FinanceDashboardCardLink = ({ to, children }) => (
   <Link
@@ -19,17 +20,23 @@ const FinanceDashboardCardLink = ({ to, children }) => (
 
 
 function FinanceDashboard() {
-  // Debug temporaire (à supprimer après validation)
-  const location = useLocation();
-  console.log(location.pathname);
   const [data, setData] = useState(null);
+  const [commissionInvoices, setCommissionInvoices] = useState([]);
 
   useEffect(() => {
     getPharmacienFinanceDashboard({ period: "month" }).then(setData);
+    getMyCommissionInvoices().then(setCommissionInvoices).catch(() => {});
   }, []);
 
   const summary = data?.summary || {};
   const payments = data?.payments || {};
+  const pendingInvoices = commissionInvoices.filter(
+    (i) => i.status === "pending" || i.status === "overdue"
+  );
+  const totalCommissionDue = pendingInvoices.reduce(
+    (s, i) => s + Number(i.commission_amount),
+    0
+  );
 
   return (
     <PharmacienLayout title="Finance" headerSubtitle="Suivez vos revenus et paiements">
@@ -70,9 +77,14 @@ function FinanceDashboard() {
             <h2 className="text-lg font-black text-[#1C2B4A]">Abonnement</h2>
             <p className="mt-3 text-sm font-semibold text-[#6B7280]">Plan actuel</p>
             <p className="mt-1 text-2xl font-black text-[#1C2B4A]">{summary.abonnement_actuel || "-"}</p>
+            {summary.commission_rate && (
+              <p className="mt-1 text-sm font-black text-[#2FA6A3]">
+                Commission {Number(summary.commission_rate * 100).toFixed(0)}%
+              </p>
+            )}
             <div className="mt-3">
               <StatusBadge
-                status={summary.date_expiration_abonnement ? "active" : "gratuit"}
+                status={summary.statut_abonnement || "active"}
               />
             </div>
           </div>
@@ -92,6 +104,29 @@ function FinanceDashboard() {
             </div>
           </div>
         </section>
+
+        {/* Commission invoices widget */}
+        {pendingInvoices.length > 0 && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-black text-amber-800">
+                  {pendingInvoices.length} facture{pendingInvoices.length > 1 ? "s" : ""} commission{" "}
+                  {pendingInvoices.some((i) => i.status === "overdue") ? "en retard" : "en attente"}
+                </p>
+                <p className="mt-1 text-xs font-semibold text-amber-700">
+                  Montant total dû à PharmaLocate : <strong>{money(totalCommissionDue)}</strong>
+                </p>
+              </div>
+              <Link
+                to="/pharmacien/finance/invoices"
+                className="shrink-0 rounded-xl bg-amber-600 px-4 py-2 text-sm font-black text-white shadow-sm"
+              >
+                Voir mes factures →
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
     </PharmacienLayout>
   );

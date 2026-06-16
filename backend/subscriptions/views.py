@@ -1,5 +1,7 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Count, Sum
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,6 +17,7 @@ from .models import (
     PlatformPaymentMethod,
     SubscriptionPayment,
     SubscriptionPlan,
+    SubscriptionRefund,
 )
 from .permissions import IsSubscriptionOwnerPharmacistOrAdmin
 from .serializers import (
@@ -24,13 +27,19 @@ from .serializers import (
     SubscriptionPaymentCreateSerializer,
     SubscriptionPaymentSerializer,
     SubscriptionPlanSerializer,
+    SubscriptionRefundCreateSerializer,
+    SubscriptionRefundSerializer,
     SubscriptionRequestSerializer,
 )
 from .subscription_service import (
+    approve_subscription_refund,
     activate_subscription,
     assign_free_plan,
     cancel_subscription,
     check_plan_limits,
+    expire_cancelled_subscriptions,
+    mark_subscription_refund_processed,
+    reject_subscription_refund,
     reject_subscription_payment,
     validate_subscription_payment,
 )
@@ -56,6 +65,7 @@ class PharmacienCurrentSubscriptionView(APIView):
     permission_classes = [IsAuthenticatedWithTokenMessage, IsPharmacien]
 
     def get(self, request):
+        expire_cancelled_subscriptions()
         pharmacy = getattr(request.user, 'pharmacy', None)
         if not pharmacy:
             return Response(
@@ -64,10 +74,21 @@ class PharmacienCurrentSubscriptionView(APIView):
             )
 
         subscription = (
-            pharmacy.subscriptions.filter(statut=PharmacySubscription.STATUS_ACTIVE)
+            pharmacy.subscriptions.filter(is_current=True)
             .select_related('plan', 'payment', 'transaction')
             .first()
         )
+        if not subscription:
+            subscription = (
+                pharmacy.subscriptions.filter(
+                    statut__in=[
+                        PharmacySubscription.STATUS_ACTIVE,
+                        PharmacySubscription.STATUS_CANCELLED,
+                    ],
+                )
+                .select_related('plan', 'payment', 'transaction')
+                .first()
+            )
         if not subscription:
             subscription = assign_free_plan(pharmacy)
 
@@ -217,6 +238,12 @@ class SubscriptionCancelView(APIView):
     ]
 
     def post(self, request, pk):
+        return self._cancel(request, pk)
+
+    def patch(self, request, pk):
+        return self._cancel(request, pk)
+
+    def _cancel(self, request, pk):
         subscription = get_object_or_404(
             PharmacySubscription.objects.select_related('pharmacy', 'plan'),
             pk=pk,
@@ -228,11 +255,89 @@ class SubscriptionCancelView(APIView):
         except DjangoValidationError as exc:
             return Response(format_django_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
 
+        if subscription.statut == PharmacySubscription.STATUS_CANCELLED:
+            message = (
+                f"Votre abonnement a ete annule. Il restera actif jusqu'au "
+                f"{subscription.cancel_effective_at:%d/%m/%Y}."
+                if subscription.cancel_effective_at
+                else 'Votre abonnement a ete annule.'
+            )
+        else:
+            message = 'Annulation deja programmee.'
+
         return Response(
             {
-                'message': 'Abonnement annule avec succes.',
+                'message': message,
                 'subscription': PharmacySubscriptionSerializer(subscription).data,
             }
+        )
+
+
+class PharmacienSubscriptionCancelView(APIView):
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsPharmacien]
+
+    def patch(self, request):
+        pharmacy = getattr(request.user, 'pharmacy', None)
+        if not pharmacy:
+            return Response(
+                {'error': 'Aucune pharmacie associee a ce pharmacien.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        subscription = (
+            pharmacy.subscriptions.filter(statut=PharmacySubscription.STATUS_ACTIVE)
+            .select_related('pharmacy', 'plan')
+            .first()
+        )
+        if not subscription:
+            return Response(
+                {'error': 'Aucun abonnement actif a annuler.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            subscription = cancel_subscription(subscription)
+        except DjangoValidationError as exc:
+            return Response(format_django_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
+
+        if subscription.cancel_effective_at:
+            message = (
+                f"Abonnement annule. Il restera actif jusqu'au "
+                f"{subscription.cancel_effective_at:%d/%m/%Y}. "
+                f"Aucun remboursement automatique ne sera effectue."
+            )
+        else:
+            message = "Abonnement annule. Aucun remboursement automatique ne sera effectue."
+
+        return Response(
+            {
+                'message': message,
+                'subscription': PharmacySubscriptionSerializer(subscription).data,
+            }
+        )
+
+
+class SubscriptionRefundRequestView(APIView):
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsPharmacien]
+
+    def post(self, request):
+        serializer = SubscriptionRefundCreateSerializer(
+            data=request.data,
+            context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            refund = serializer.save()
+        except DjangoValidationError as exc:
+            return Response(format_django_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                'message': 'Demande de remboursement abonnement envoyee.',
+                'refund': SubscriptionRefundSerializer(refund).data,
+            },
+            status=status.HTTP_201_CREATED,
         )
 
 
@@ -320,3 +425,106 @@ class AdminSubscriptionPlanUpdateView(generics.RetrieveUpdateAPIView):
     serializer_class = SubscriptionPlanSerializer
     permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
     queryset = SubscriptionPlan.objects.all()
+
+
+class AdminSubscriptionRefundListView(generics.ListAPIView):
+    serializer_class = SubscriptionRefundSerializer
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+
+    def get_queryset(self):
+        queryset = SubscriptionRefund.objects.select_related(
+            'subscription_payment__subscription__plan',
+            'pharmacy',
+            'requested_by',
+            'processed_by',
+        ).order_by('-created_at')
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        return queryset
+
+
+class AdminSubscriptionRefundActionView(APIView):
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+    action = None
+
+    def patch(self, request, pk):
+        refund = get_object_or_404(
+            SubscriptionRefund.objects.select_related('subscription_payment', 'pharmacy'),
+            pk=pk,
+        )
+        note = request.data.get('admin_note') or request.data.get('reason') or ''
+        try:
+            if self.action == 'approve':
+                refund = approve_subscription_refund(refund, request.user, note=note)
+                message = 'Remboursement abonnement approuve.'
+            elif self.action == 'reject':
+                refund = reject_subscription_refund(refund, request.user, note=note)
+                message = 'Remboursement abonnement refuse.'
+            else:
+                refund = mark_subscription_refund_processed(refund, request.user, note=note)
+                message = 'Remboursement abonnement marque comme traite.'
+        except DjangoValidationError as exc:
+            return Response(format_django_validation_error(exc), status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                'message': message,
+                'refund': SubscriptionRefundSerializer(refund).data,
+            }
+        )
+
+
+class AdminSubscriptionRefundApproveView(AdminSubscriptionRefundActionView):
+    action = 'approve'
+
+
+class AdminSubscriptionRefundRejectView(AdminSubscriptionRefundActionView):
+    action = 'reject'
+
+
+class AdminSubscriptionRefundProcessedView(AdminSubscriptionRefundActionView):
+    action = 'processed'
+
+
+class AdminSubscriptionDashboardView(APIView):
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+
+    def get(self, request):
+        subscriptions = PharmacySubscription.objects.select_related('plan')
+        payments = SubscriptionPayment.objects.all()
+        refunds = SubscriptionRefund.objects.all()
+        now = timezone.now()
+
+        plan_distribution = list(
+            subscriptions.filter(statut=PharmacySubscription.STATUS_ACTIVE)
+            .values('plan__code', 'plan__nom')
+            .annotate(count=Count('id'))
+            .order_by('plan__prix_mensuel')
+        )
+
+        return Response(
+            {
+                'active_subscriptions': subscriptions.filter(
+                    statut=PharmacySubscription.STATUS_ACTIVE,
+                ).count(),
+                'expired_subscriptions': subscriptions.filter(
+                    statut=PharmacySubscription.STATUS_EXPIRED,
+                ).count(),
+                'pending_subscription_payments': payments.filter(
+                    status=SubscriptionPayment.STATUS_PENDING,
+                ).count(),
+                'subscription_revenue': payments.filter(
+                    status=SubscriptionPayment.STATUS_VALIDATED,
+                ).aggregate(total=Sum('amount'))['total'] or 0,
+                'requested_refunds': refunds.filter(
+                    status=SubscriptionRefund.STATUS_REQUESTED,
+                ).count(),
+                'ending_soon': subscriptions.filter(
+                    statut=PharmacySubscription.STATUS_ACTIVE,
+                    date_fin__isnull=False,
+                    date_fin__lte=now + timezone.timedelta(days=7),
+                ).count(),
+                'plan_distribution': plan_distribution,
+            }
+        )

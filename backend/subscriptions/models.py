@@ -10,7 +10,8 @@ from transactions.models import Transaction
 
 
 class SubscriptionPlan(models.Model):
-    CODE_FREE = 'gratuit'
+    CODE_FREE = 'free'
+    CODE_FREE_ALIAS = 'gratuit'
     CODE_STANDARD = 'standard'
     CODE_PREMIUM = 'premium'
 
@@ -27,6 +28,14 @@ class SubscriptionPlan(models.Model):
         decimal_places=2,
         default=Decimal('0.00'),
     )
+    commission_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        default=Decimal('0.0500'),
+        help_text='Commission plateforme appliquee aux commandes, ex: 0.0500 = 5%.',
+    )
+    duration_days = models.PositiveIntegerField(default=30)
+    features = models.JSONField(default=list, blank=True)
     max_medicaments = models.PositiveIntegerField(default=50)
     visibilite_prioritaire = models.BooleanField(default=False)
     statistiques_avancees = models.BooleanField(default=False)
@@ -34,6 +43,7 @@ class SubscriptionPlan(models.Model):
     notifications_prioritaires = models.BooleanField(default=False)
     est_actif = models.BooleanField(default=True)
     date_creation = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['prix_mensuel', 'nom']
@@ -50,7 +60,7 @@ class SubscriptionPlan(models.Model):
 
     @property
     def duree_jours(self):
-        return 30 if self.prix_mensuel > 0 else 365
+        return self.duration_days
 
     def __str__(self):
         return self.nom
@@ -60,6 +70,7 @@ class PharmacySubscription(models.Model):
     STATUS_ACTIVE = 'active'
     STATUS_EXPIRED = 'expiree'
     STATUS_CANCELLED = 'annulee'
+    STATUS_INACTIVE = 'inactive'
     STATUS_PENDING_PAYMENT = 'en_attente_paiement'
     STATUS_PENDING_VALIDATION = 'en_attente_validation'
     STATUS_REJECTED = 'refuse'
@@ -68,6 +79,7 @@ class PharmacySubscription(models.Model):
         (STATUS_ACTIVE, 'Active'),
         (STATUS_EXPIRED, 'Expiree'),
         (STATUS_CANCELLED, 'Annulee'),
+        (STATUS_INACTIVE, 'Inactive'),
         (STATUS_PENDING_PAYMENT, 'En attente paiement'),
         (STATUS_PENDING_VALIDATION, 'En attente validation'),
         (STATUS_REJECTED, 'Refusee'),
@@ -92,6 +104,10 @@ class PharmacySubscription(models.Model):
     date_debut = models.DateTimeField(null=True, blank=True)
     date_fin = models.DateTimeField(null=True, blank=True)
     renouvellement_auto = models.BooleanField(default=True)
+    is_current = models.BooleanField(default=False, db_index=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancel_effective_at = models.DateTimeField(null=True, blank=True)
+    expired_at = models.DateTimeField(null=True, blank=True)
     payment = models.ForeignKey(
         Payment,
         on_delete=models.PROTECT,
@@ -107,6 +123,7 @@ class PharmacySubscription(models.Model):
         related_name='subscription',
     )
     date_creation = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['-date_creation']
@@ -150,6 +167,10 @@ class PharmacySubscription(models.Model):
     @property
     def is_active(self):
         return self.statut == self.STATUS_ACTIVE
+
+    @property
+    def commission_rate(self):
+        return self.plan.commission_rate
 
     def __str__(self):
         return f'{self.pharmacy.nom} - {self.plan.nom}'
@@ -212,12 +233,14 @@ class SubscriptionPayment(models.Model):
     STATUS_VALIDATED = 'valide'
     STATUS_REJECTED = 'refuse'
     STATUS_CANCELLED = 'annule'
+    STATUS_REFUNDED = 'rembourse'
 
     STATUS_CHOICES = [
         (STATUS_PENDING, 'En attente validation'),
         (STATUS_VALIDATED, 'Valide'),
         (STATUS_REJECTED, 'Refuse'),
         (STATUS_CANCELLED, 'Annule'),
+        (STATUS_REFUNDED, 'Rembourse'),
     ]
 
     pharmacy = models.ForeignKey(
@@ -250,12 +273,13 @@ class SubscriptionPayment(models.Model):
     validated_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['status', 'created_at']),
-            models.Index(fields=['pharmacy', 'status']),
+            models.Index(fields=['status', 'created_at'], name='subscriptio_status_9569df_idx'),
+            models.Index(fields=['pharmacy', 'status'], name='subscriptio_pharmac_420dbf_idx'),
         ]
         verbose_name = 'Paiement abonnement'
         verbose_name_plural = 'Paiements abonnements'
@@ -274,3 +298,83 @@ class SubscriptionPayment(models.Model):
 
     def __str__(self):
         return f'Paiement abonnement #{self.id} - {self.status}'
+
+
+class SubscriptionRefund(models.Model):
+    STATUS_REQUESTED = 'requested'
+    STATUS_APPROVED = 'approved'
+    STATUS_REJECTED = 'rejected'
+    STATUS_PROCESSED = 'processed'
+
+    STATUS_CHOICES = [
+        (STATUS_REQUESTED, 'Demandee'),
+        (STATUS_APPROVED, 'Approuvee'),
+        (STATUS_REJECTED, 'Refusee'),
+        (STATUS_PROCESSED, 'Traitee'),
+    ]
+
+    subscription_payment = models.ForeignKey(
+        SubscriptionPayment,
+        on_delete=models.CASCADE,
+        related_name='refunds',
+    )
+    pharmacy = models.ForeignKey(
+        Pharmacy,
+        on_delete=models.CASCADE,
+        related_name='subscription_refunds',
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reason = models.TextField()
+    status = models.CharField(
+        max_length=30,
+        choices=STATUS_CHOICES,
+        default=STATUS_REQUESTED,
+        db_index=True,
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='requested_subscription_refunds',
+    )
+    processed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='processed_subscription_refunds',
+    )
+    processed_at = models.DateTimeField(null=True, blank=True)
+    admin_note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', 'created_at'], name='subscriptio_status_6e6cb0_idx'),
+            models.Index(fields=['pharmacy', 'status'], name='subscriptio_pharmac_0fd100_idx'),
+        ]
+        verbose_name = 'Remboursement abonnement'
+        verbose_name_plural = 'Remboursements abonnements'
+
+    def clean(self):
+        errors = {}
+
+        if self.subscription_payment_id:
+            if self.pharmacy_id != self.subscription_payment.pharmacy_id:
+                errors['subscription_payment'] = (
+                    'Ce paiement abonnement ne correspond pas a cette pharmacie.'
+                )
+
+            if self.amount > self.subscription_payment.amount:
+                errors['amount'] = 'Le remboursement ne peut pas depasser le paiement.'
+
+        if self.amount <= 0:
+            errors['amount'] = 'Le montant rembourse doit etre positif.'
+
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return f'Remboursement abonnement #{self.id} - {self.status}'

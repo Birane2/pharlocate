@@ -55,7 +55,7 @@ export async function getPharmacienTransactions(params = {}) {
 }
 
 export async function getPharmacienPayments(params = {}) {
-  const response = await API.get("/api/payments/pharmacien/", { params });
+  const response = await API.get("/api/pharmacien/finance/payments/", { params });
   return normalizeList(response.data);
 }
 
@@ -138,8 +138,13 @@ export async function sendSubscriptionPayment(payload) {
   return response.data;
 }
 
-export async function cancelSubscription(id) {
-  const response = await API.post(`/api/subscriptions/${id}/cancel/`);
+export async function cancelSubscription() {
+  const response = await API.patch("/api/pharmacien/subscription/cancel/");
+  return response.data;
+}
+
+export async function requestSubscriptionRefund(payload) {
+  const response = await API.post("/api/pharmacien/subscription/refund-request/", payload);
   return response.data;
 }
 
@@ -223,8 +228,23 @@ export async function executeRefund(id) {
 }
 
 export async function getAdminSubscriptions(params = {}) {
-  const response = await API.get("/api/admin/subscriptions/", { params });
+  const response = await API.get("/api/admin/finance/subscriptions/", { params });
   return normalizeList(response.data);
+}
+
+export async function getAdminFinancePayments(params = {}) {
+  const response = await API.get("/api/admin/finance/payments/", { params });
+  return response.data;
+}
+
+export async function getAdminFinanceSubscriptions(params = {}) {
+  const response = await API.get("/api/admin/finance/subscriptions/", { params });
+  return normalizeList(response.data);
+}
+
+export async function getAdminFinanceRefunds(params = {}) {
+  const response = await API.get("/api/admin/finance/refunds/", { params });
+  return response.data;
 }
 
 export async function getAdminPlatformPaymentMethods() {
@@ -251,5 +271,89 @@ export async function rejectSubscriptionPayment(id, rejection_reason) {
   const response = await API.patch(`/api/admin/subscription-payments/${id}/reject/`, {
     rejection_reason,
   });
+  return response.data;
+}
+
+export async function getAdminSubscriptionRefunds(params = {}) {
+  const response = await API.get("/api/admin/subscription-refunds/", { params });
+  return normalizeList(response.data);
+}
+
+export async function approveSubscriptionRefund(id, admin_note = "") {
+  const response = await API.patch(`/api/admin/subscription-refunds/${id}/approve/`, {
+    admin_note,
+  });
+  return response.data;
+}
+
+export async function rejectSubscriptionRefund(id, admin_note = "") {
+  const response = await API.patch(`/api/admin/subscription-refunds/${id}/reject/`, {
+    admin_note,
+  });
+  return response.data;
+}
+
+export async function markSubscriptionRefundProcessed(id, admin_note = "") {
+  const response = await API.patch(`/api/admin/subscription-refunds/${id}/processed/`, {
+    admin_note,
+  });
+  return response.data;
+}
+
+export async function getAdminSubscriptionDashboard() {
+  const response = await API.get("/api/admin/subscriptions/dashboard/");
+  return response.data;
+}
+
+// ── Commission invoices — pharmacien ──────────────────────────────────────
+
+export async function getPharmacienCommissionInvoices(params = {}) {
+  const response = await API.get("/api/pharmacien/finance/commission-invoices/", { params });
+  return response.data;
+}
+
+export async function getPharmacienCommissionInvoiceDetail(id) {
+  const response = await API.get(`/api/pharmacien/finance/commission-invoices/${id}/`);
+  return response.data;
+}
+
+export async function payCommissionInvoice(id, formData) {
+  const response = await API.post(
+    `/api/pharmacien/finance/commission-invoices/${id}/pay/`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
+  return response.data;
+}
+
+// ── Commission invoices — admin ───────────────────────────────────────────
+
+export async function adminGetCommissionInvoices(params = {}) {
+  const response = await API.get("/api/admin/finance/commission-invoices/", { params });
+  return response.data;
+}
+
+export async function adminGetCommissionInvoiceDetail(id) {
+  const response = await API.get(`/api/admin/finance/commission-invoices/${id}/`);
+  return response.data;
+}
+
+export async function adminGenerateCommissionInvoice(payload) {
+  const response = await API.post("/api/admin/finance/commission-invoices/generate/", payload);
+  return response.data;
+}
+
+export async function adminValidateCommissionPayment(id) {
+  const response = await API.patch(
+    `/api/admin/finance/commission-invoices/payments/${id}/validate/`
+  );
+  return response.data;
+}
+
+export async function adminRejectCommissionPayment(id, reason) {
+  const response = await API.patch(
+    `/api/admin/finance/commission-invoices/payments/${id}/reject/`,
+    { reason }
+  );
   return response.data;
 }

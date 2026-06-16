@@ -5,6 +5,7 @@ from .models import (
     PlatformPaymentMethod,
     SubscriptionPayment,
     SubscriptionPlan,
+    SubscriptionRefund,
 )
 
 
@@ -15,6 +16,8 @@ class SubscriptionPlanAdmin(admin.ModelAdmin):
         'code',
         'prix_mensuel',
         'prix_annuel',
+        'commission_rate',
+        'duration_days',
         'est_actif',
     )
     list_filter = ('est_actif', 'badge_premium', 'statistiques_avancees')
@@ -30,11 +33,13 @@ class PharmacySubscriptionAdmin(admin.ModelAdmin):
         'statut',
         'date_debut',
         'date_fin',
-        'renouvellement_auto',
+        'is_current',
+        'cancelled_at',
+        'cancel_effective_at',
     )
-    list_filter = ('plan', 'statut', 'date_debut')
+    list_filter = ('plan', 'statut', 'is_current', 'date_debut')
     search_fields = ('pharmacy__nom', 'plan__nom', 'plan__code')
-    readonly_fields = ('date_creation',)
+    readonly_fields = ('date_creation', 'cancelled_at', 'cancel_effective_at')
     autocomplete_fields = ('pharmacy', 'plan', 'payment', 'transaction')
 
 
@@ -60,3 +65,24 @@ class SubscriptionPaymentAdmin(admin.ModelAdmin):
     search_fields = ('pharmacy__nom', 'transaction_id', 'subscription__plan__nom')
     readonly_fields = ('created_at', 'validated_at')
     autocomplete_fields = ('pharmacy', 'subscription', 'validated_by')
+
+
+@admin.register(SubscriptionRefund)
+class SubscriptionRefundAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'pharmacy',
+        'subscription_payment',
+        'amount',
+        'status',
+        'created_at',
+    )
+    list_filter = ('status', 'created_at')
+    search_fields = ('pharmacy__nom', 'reason', 'admin_note')
+    readonly_fields = ('created_at', 'processed_at')
+    autocomplete_fields = (
+        'subscription_payment',
+        'pharmacy',
+        'requested_by',
+        'processed_by',
+    )
