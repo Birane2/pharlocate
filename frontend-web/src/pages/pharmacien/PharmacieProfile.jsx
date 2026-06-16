@@ -11,51 +11,39 @@ import {
   updateMyPharmacyPhoto,
   updateMyPharmacyProfile,
 } from "../../services/pharmacyService";
-import { getBrowserPosition } from "../../services/googleMapsService";
 
 const initialForm = {
   nom: "",
   adresse: "",
   telephone: "",
-  latitude: "",
-  longitude: "",
+  google_maps_url: "",
 };
 
 function getApiErrorMessage(error) {
   if (error.response?.status === 401) {
     return "Votre session a expire. Veuillez vous reconnecter.";
   }
-
   if (error.response?.status === 403) {
     return "Acces refuse.";
   }
-
   if (error.response?.status === 404) {
     return (
       error.response?.data?.message ||
       "Ce pharmacien ne possede pas encore de pharmacie associee. Veuillez creer votre pharmacie pour acceder a toutes les fonctionnalites."
     );
   }
-
   if (error.response?.status === 500) {
     return "Erreur serveur. Reessayez plus tard.";
   }
 
   const data = error.response?.data;
-
-  if (typeof data?.detail === "string") {
-    return data.detail;
-  }
+  if (typeof data?.detail === "string") return data.detail;
 
   if (data && typeof data === "object") {
-    const firstValue = Object.values(data)[0];
-
-    if (Array.isArray(firstValue) && firstValue[0]) {
-      return firstValue[0];
-    }
-
-    if (typeof firstValue === "string") {
-      return firstValue;
+    // Handle nested field errors like { google_maps_url: ["..."] }
+    for (const val of Object.values(data)) {
+      if (Array.isArray(val) && val[0]) return val[0];
+      if (typeof val === "string") return val;
     }
   }
 
@@ -67,9 +55,13 @@ function toForm(pharmacy) {
     nom: pharmacy.nom || "",
     adresse: pharmacy.adresse || "",
     telephone: pharmacy.telephone || "",
-    latitude: pharmacy.latitude || "",
-    longitude: pharmacy.longitude || "",
+    google_maps_url: pharmacy.google_maps_url || "",
   };
+}
+
+function toCoords(pharmacy) {
+  if (!pharmacy?.latitude || !pharmacy?.longitude) return null;
+  return { lat: pharmacy.latitude, lng: pharmacy.longitude };
 }
 
 function PharmacieProfile() {
@@ -79,7 +71,6 @@ function PharmacieProfile() {
   const [hasPharmacy, setHasPharmacy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [detectingPosition, setDetectingPosition] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
@@ -99,7 +90,6 @@ function PharmacieProfile() {
           setError("");
           return;
         }
-
         setError(getApiErrorMessage(err));
       } finally {
         setLoading(false);
@@ -127,7 +117,10 @@ function PharmacieProfile() {
         const data = await updateMyPharmacyProfile(form);
         setPharmacy(data);
         setForm(toForm(data));
-        setSuccessMessage("Profil pharmacie mis a jour avec succes.");
+        const coordsMsg = data.latitude && data.longitude
+          ? " Position GPS enregistree."
+          : "";
+        setSuccessMessage("Profil pharmacie mis a jour avec succes." + coordsMsg);
       } else {
         const response = await createPharmacy(form);
         const data = response.data || response;
@@ -146,33 +139,9 @@ function PharmacieProfile() {
     }
   };
 
-  const handleUseCurrentPosition = async () => {
-    setDetectingPosition(true);
-    setError("");
-    setSuccessMessage("");
-
-    try {
-      const position = await getBrowserPosition();
-
-      setForm((prev) => ({
-        ...prev,
-        latitude: position.lat.toFixed(6),
-        longitude: position.lng.toFixed(6),
-      }));
-      setSuccessMessage("Position actuelle detectee. Verifiez puis enregistrez le formulaire.");
-    } catch (err) {
-      setError(err.message || "Impossible de recuperer votre position actuelle.");
-    } finally {
-      setDetectingPosition(false);
-    }
-  };
-
   const handlePhotoChange = async (event) => {
     const photo = event.target.files?.[0];
-
-    if (!photo) {
-      return;
-    }
+    if (!photo) return;
 
     setUploadingPhoto(true);
     setError("");
@@ -228,14 +197,13 @@ function PharmacieProfile() {
 
                   <PharmacieProfileForm
                     form={form}
+                    currentCoords={null}
                     submitting={submitting}
                     uploadingPhoto={false}
-                    detectingPosition={detectingPosition}
                     showPhoto={false}
                     submitLabel="Creer"
                     onChange={handleChange}
                     onPhotoChange={() => {}}
-                    onUseCurrentPosition={handleUseCurrentPosition}
                     onSubmit={handleSubmit}
                   />
                 </section>
@@ -246,14 +214,13 @@ function PharmacieProfile() {
               <section>
                 <PharmacieProfileForm
                   form={form}
+                  currentCoords={toCoords(pharmacy)}
                   photoPreview={pharmacy.photo}
                   submitting={submitting}
                   uploadingPhoto={uploadingPhoto}
-                  detectingPosition={detectingPosition}
                   submitLabel="Enregistrer les modifications"
                   onChange={handleChange}
                   onPhotoChange={handlePhotoChange}
-                  onUseCurrentPosition={handleUseCurrentPosition}
                   onSubmit={handleSubmit}
                 />
               </section>

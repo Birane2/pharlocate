@@ -50,7 +50,7 @@ function Login() {
     } else if (profile?.role === "admin") {
       navigate("/admin/dashboard");
     } else {
-      navigate("/");
+      navigate("/dashboard");
     }
   };
 

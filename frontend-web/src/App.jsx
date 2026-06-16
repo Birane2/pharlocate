@@ -29,6 +29,7 @@ import Payments from "./pages/user/Payments";
 import PaymentDetail from "./pages/user/PaymentDetail";
 import Invoices from "./pages/user/Invoices";
 import InvoiceDetail from "./pages/user/InvoiceDetail";
+import UserDashboard from "./pages/user/UserDashboard";
 import FinanceDashboard from "./pages/pharmacien/FinanceDashboard";
 import FinanceTransactions from "./pages/pharmacien/FinanceTransactions";
 import PharmacienPayments from "./pages/pharmacien/PharmacienPayments";
@@ -50,6 +51,24 @@ function App() {
       <Route path="/pharmacies" element={<PharmacyList />} />
       <Route path="/pharmacies/:id" element={<PharmacyDetail />} />
       <Route path="/map" element={<MapPage />} />
+
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={["utilisateur"]}>
+            <UserDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/home"
+        element={
+          <ProtectedRoute allowedRoles={["utilisateur"]}>
+            <UserDashboard />
+          </ProtectedRoute>
+        }
+      />
 
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />

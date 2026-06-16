@@ -28,23 +28,23 @@ function ReservationTypeSelector({ value, onChange, disabled = false }) {
             type="button"
             disabled={disabled}
             onClick={() => onChange(option.value)}
-            className={`group rounded-2xl border p-4 text-left transition duration-300 disabled:cursor-not-allowed disabled:opacity-60 ${
+            className={`group rounded-2xl border p-3 text-left transition duration-300 disabled:cursor-not-allowed disabled:opacity-60 ${
               selected
                 ? "border-[#2FA6A3] bg-[#E8F7F3] shadow-sm"
                 : "border-[#E2E8F2] bg-white hover:-translate-y-0.5 hover:border-[#2F6E9E]/40 hover:shadow-sm"
             }`}
           >
             <span
-              className={`flex h-11 w-11 items-center justify-center rounded-2xl ${
+              className={`flex h-9 w-9 items-center justify-center rounded-xl ${
                 selected ? "bg-[#2FA6A3] text-white" : "bg-[#F0F5FB] text-[#2F6E9E]"
               }`}
             >
               <FontAwesomeIcon icon={option.icon} />
             </span>
-            <span className="mt-3 block text-base font-black text-[#1C2B4A]">
+            <span className="mt-2 block text-sm font-black text-[#1C2B4A]">
               {option.title}
             </span>
-            <span className="mt-1 block text-sm text-[#6B7280]">
+            <span className="mt-1 block text-xs font-semibold text-[#6B7280]">
               {option.description}
             </span>
           </button>

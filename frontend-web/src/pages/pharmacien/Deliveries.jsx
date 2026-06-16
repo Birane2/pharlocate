@@ -111,7 +111,32 @@ function Deliveries() {
   };
 
   useEffect(() => {
-    loadDeliveries();
+    let ignore = false;
+
+    getPharmacistDeliveries()
+      .then((data) => {
+        if (!ignore) {
+          setDeliveries(data);
+        }
+      })
+      .catch((err) => {
+        if (!ignore) {
+          setError(
+            err?.response?.data?.detail ||
+              err?.response?.data?.error ||
+              "Impossible de charger les livraisons."
+          );
+        }
+      })
+      .finally(() => {
+        if (!ignore) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   const updateStatus = async (delivery, action, message) => {

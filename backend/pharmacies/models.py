@@ -39,6 +39,7 @@ class Pharmacy(models.Model):
         choices=STATUT_VALIDATION_CHOICES,
         default='en_attente',
     )
+    google_maps_url = models.URLField(max_length=500, blank=True, null=True)
     motif_refus = models.TextField(blank=True, null=True)
     date_creation = models.DateTimeField(auto_now_add=True)
     date_modification = models.DateTimeField(auto_now=True)

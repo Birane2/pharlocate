@@ -23,7 +23,9 @@ export async function markDeliveryInProgress(id) {
 }
 
 export async function markDeliveryDelivered(id) {
+  console.debug("delivery id =", id);
   const response = await API.patch(`/api/pharmacien/deliveries/${id}/delivered/`);
+  console.debug("mark delivered response =", response.data);
   return response.data;
 }
 

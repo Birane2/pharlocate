@@ -62,7 +62,7 @@ function VerifyOtp() {
     } else if (user?.role === "admin") {
       navigate("/admin/dashboard");
     } else {
-      navigate("/");
+      navigate("/dashboard");
     }
   };
 

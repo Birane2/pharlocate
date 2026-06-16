@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faChevronDown,
+  faArrowUpRightFromSquare,
+  faCircleCheck,
   faFloppyDisk,
   faImage,
-  faLocationCrosshairs,
+  faLocationDot,
+  faTriangleExclamation,
   faUpload,
 } from "@fortawesome/free-solid-svg-icons";
 import Button from "../ui/Button";
@@ -20,30 +22,22 @@ function SectionTitle({ children }) {
 
 function PharmacieProfileForm({
   form,
+  currentCoords,
   photoPreview,
   submitting,
   uploadingPhoto,
-  detectingPosition,
   submitLabel = "Enregistrer les modifications",
   showPhoto = true,
   onChange,
   onPhotoChange,
-  onUseCurrentPosition,
   onSubmit,
 }) {
-  const [showCoordinates, setShowCoordinates] = useState(false);
   const [selectedPhotoName, setSelectedPhotoName] = useState("");
-  const hasCoordinates = Boolean(form.latitude && form.longitude);
+  const hasCoordinates = Boolean(currentCoords?.lat && currentCoords?.lng);
 
   const photoName = useMemo(() => {
-    if (selectedPhotoName) {
-      return selectedPhotoName;
-    }
-
-    if (!photoPreview) {
-      return "Aucune photo selectionnee";
-    }
-
+    if (selectedPhotoName) return selectedPhotoName;
+    if (!photoPreview) return "Aucune photo selectionnee";
     return decodeURIComponent(photoPreview.split("/").pop() || "Photo actuelle");
   }, [photoPreview, selectedPhotoName]);
 
@@ -56,7 +50,11 @@ function PharmacieProfileForm({
   return (
     <form onSubmit={onSubmit} className="rounded-2xl border border-[#E2E8F2] bg-white p-4 shadow-sm">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+
+        {/* Colonne principale */}
         <div className="space-y-4">
+
+          {/* Informations générales */}
           <section>
             <SectionTitle>Informations generales</SectionTitle>
             <div className="grid gap-3 md:grid-cols-2">
@@ -85,75 +83,77 @@ function PharmacieProfileForm({
             </div>
           </section>
 
+          {/* Localisation */}
           <section className="border-t border-[#E2E8F2] pt-4">
-            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <SectionTitle>Localisation</SectionTitle>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                icon={faLocationCrosshairs}
-                loading={detectingPosition}
-                disabled={submitting || detectingPosition}
-                onClick={onUseCurrentPosition}
-                className="w-full sm:w-auto"
-              >
-                Detecter ma position
-              </Button>
-            </div>
+            <SectionTitle>Localisation GPS</SectionTitle>
 
-            <div className="flex flex-col gap-2 rounded-xl bg-[#F8FAFC] px-3 py-2 text-xs font-semibold text-[#6B7280] sm:flex-row sm:items-center sm:justify-between">
-              <span>
-                Position actuelle
-              </span>
-              <span className="text-[#1C2B4A]">
-                {hasCoordinates ? `${form.latitude}, ${form.longitude}` : "Non detectee"}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowCoordinates((isOpen) => !isOpen)}
-              className="mt-3 inline-flex items-center gap-2 rounded-xl border border-[#2F6E9E]/15 px-3 py-2 text-xs font-bold text-[#2F6E9E] transition hover:bg-[#2F6E9E]/8"
-            >
-              Afficher les coordonnees GPS
-              <FontAwesomeIcon
-                icon={faChevronDown}
-                className={`h-3 w-3 transition ${showCoordinates ? "rotate-180" : ""}`}
-              />
-            </button>
-
-            {showCoordinates && (
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <Input
-                  label="Latitude"
-                  name="latitude"
-                  type="number"
-                  step="0.000001"
-                  min="-90"
-                  max="90"
-                  value={form.latitude}
+            <div className="space-y-3">
+              {/* Champ URL Google Maps */}
+              <label className="block">
+                <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-[#1C2B4A]">
+                  <FontAwesomeIcon icon={faLocationDot} className="text-[#2F6E9E]" style={{ fontSize: "10px" }} />
+                  Lien Google Maps
+                </span>
+                <input
+                  type="url"
+                  name="google_maps_url"
+                  value={form.google_maps_url}
                   onChange={onChange}
-                  placeholder="18.114961"
-                  helperText="Entre -90 et 90"
+                  disabled={submitting}
+                  placeholder="https://maps.google.com/?q=18.0735,-15.9582"
+                  className="w-full rounded-xl border border-[#E2E8F2] bg-white px-3 py-2 text-sm text-[#1C2B4A] outline-none transition focus:border-[#2FA6A3] focus:ring-2 focus:ring-[#2FA6A3]/10 disabled:bg-[#F8FAFC] disabled:opacity-70 placeholder:text-[#CBD5E1]"
                 />
-                <Input
-                  label="Longitude"
-                  name="longitude"
-                  type="number"
-                  step="0.000001"
-                  min="-180"
-                  max="180"
-                  value={form.longitude}
-                  onChange={onChange}
-                  placeholder="-15.961197"
-                  helperText="Entre -180 et 180"
-                />
+                <p className="mt-1 text-[11px] text-[#9CA3AF]">
+                  Collez ici le lien Google Maps de votre pharmacie.
+                </p>
+              </label>
+
+              {/* Instructions */}
+              <div className="rounded-xl border border-[#2F6E9E]/15 bg-[#EEF6FB] px-3 py-2.5">
+                <p className="text-xs font-bold text-[#2F6E9E]">Comment obtenir le lien ?</p>
+                <ol className="mt-1.5 list-inside list-decimal space-y-0.5 text-[11px] text-[#4B7BA5]">
+                  <li>Ouvrez Google Maps et recherchez votre pharmacie</li>
+                  <li>Cliquez sur votre pharmacie pour la selectionner</li>
+                  <li>Appuyez sur &ldquo;Partager&rdquo; → &ldquo;Copier le lien&rdquo;</li>
+                  <li>Collez le lien dans le champ ci-dessus</li>
+                </ol>
               </div>
-            )}
+
+              {/* Statut de la position */}
+              {hasCoordinates ? (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-[#2FA6A3]/25 bg-[#E8F7F3] px-3 py-2.5">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <FontAwesomeIcon icon={faCircleCheck} className="shrink-0 text-[#2FA6A3]" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-[#167769]">Position enregistree</p>
+                      <p className="truncate text-[11px] text-[#2FA6A3]">
+                        {currentCoords.lat}, {currentCoords.lng}
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href={`https://maps.google.com/?q=${currentCoords.lat},${currentCoords.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#2FA6A3] px-2.5 py-1.5 text-[11px] font-bold text-white transition hover:bg-[#248C8A]"
+                  >
+                    <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: "9px" }} />
+                    Ouvrir
+                  </a>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                  <FontAwesomeIcon icon={faTriangleExclamation} className="shrink-0" />
+                  <span>
+                    Aucune position enregistree. Ajoutez un lien Google Maps pour localiser votre pharmacie sur la carte.
+                  </span>
+                </div>
+              )}
+            </div>
           </section>
         </div>
 
+        {/* Colonne latérale */}
         <aside className="space-y-4 border-t border-[#E2E8F2] pt-4 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
           {showPhoto && (
             <section>

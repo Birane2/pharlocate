@@ -1,11 +1,11 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faLocationDot, faPhone, faNoteSticky } from "@fortawesome/free-solid-svg-icons";
+import { faLocationDot, faNoteSticky, faCircleCheck, faTriangleExclamation } from "@fortawesome/free-solid-svg-icons";
 
 function Field({ icon, label, children }) {
   return (
     <label className="block">
-      <span className="mb-2 flex items-center gap-2 text-sm font-black text-[#1C2B4A]">
-        <FontAwesomeIcon icon={icon} className="text-[#2F6E9E]" />
+      <span className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-[#1C2B4A]">
+        <FontAwesomeIcon icon={icon} className="text-[#2F6E9E] text-[10px]" />
         {label}
       </span>
       {children}
@@ -13,49 +13,47 @@ function Field({ icon, label, children }) {
   );
 }
 
-function DeliveryAddressForm({
-  values,
-  onChange,
-  locationStatus,
-  disabled = false,
-}) {
+function DeliveryAddressForm({ values, onChange, locationStatus, disabled = false }) {
   const inputClass =
-    "w-full rounded-2xl border border-[#E2E8F2] bg-white px-4 py-3 text-sm font-semibold text-[#1C2B4A] outline-none transition focus:border-[#2FA6A3] focus:ring-4 focus:ring-[#2FA6A3]/10";
+    "w-full rounded-xl border border-[#E2E8F2] bg-white px-3 py-2 text-sm text-[#1C2B4A] outline-none transition focus:border-[#2FA6A3] focus:ring-2 focus:ring-[#2FA6A3]/10 disabled:bg-[#F8FAFC] disabled:opacity-70";
+
+  const gpsOk = locationStatus?.includes("recuperee") || locationStatus?.includes("automatiquement");
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-[#2FA6A3]/20 bg-[#E8F7F3] px-4 py-3 text-sm font-semibold text-[#167769]">
-        {locationStatus || "La position GPS sera recuperee automatiquement."}
+    <div className="space-y-2.5">
+      {/* GPS status */}
+      <div
+        className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold ${
+          gpsOk
+            ? "border-[#2FA6A3]/25 bg-[#E8F7F3] text-[#167769]"
+            : "border-amber-200 bg-amber-50 text-amber-700"
+        }`}
+      >
+        <FontAwesomeIcon
+          icon={gpsOk ? faCircleCheck : faTriangleExclamation}
+          className="shrink-0"
+        />
+        <span>{locationStatus || "Recuperation de la position GPS..."}</span>
       </div>
 
       <Field icon={faLocationDot} label="Adresse de livraison">
         <textarea
           disabled={disabled}
           value={values.address}
-          onChange={(event) => onChange("address", event.target.value)}
-          rows={3}
+          onChange={(e) => onChange("address", e.target.value)}
+          rows={2}
           className={inputClass}
           placeholder="Ex: Tevragh Zeina, pres de..."
         />
       </Field>
 
-      <Field icon={faPhone} label="Telephone de livraison">
-        <input
-          disabled={disabled}
-          value={values.phone}
-          onChange={(event) => onChange("phone", event.target.value)}
-          className={inputClass}
-          placeholder="+22233613535"
-        />
-      </Field>
-
-      <Field icon={faNoteSticky} label="Note optionnelle">
+      <Field icon={faNoteSticky} label="Note pour le livreur (optionnelle)">
         <input
           disabled={disabled}
           value={values.note}
-          onChange={(event) => onChange("note", event.target.value)}
+          onChange={(e) => onChange("note", e.target.value)}
           className={inputClass}
-          placeholder="Instruction pour le livreur"
+          placeholder="Batiment, etage, point de repere..."
         />
       </Field>
     </div>

@@ -4,7 +4,6 @@ import {
   faCartPlus,
   faCoins,
   faLayerGroup,
-  faShieldHeart,
 } from "@fortawesome/free-solid-svg-icons";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
@@ -24,15 +23,15 @@ function MedicamentCard({ stock, onReserve }) {
   const statusLabel = stock.status || stock.statut || (isAvailable ? "Disponible" : "Rupture");
 
   return (
-    <Card className="h-full border-[#2F6E9E]/10 bg-white/95">
-      <div className="flex h-full flex-col gap-5">
-        <div className="overflow-hidden rounded-[1.5rem] border border-[#2F6E9E]/10 bg-[linear-gradient(145deg,_rgba(47,110,158,0.06),_rgba(47,166,163,0.06))]">
+    <Card className="h-full border-[#2F6E9E]/10 bg-white/95" bodyClassName="p-4">
+      <div className="flex h-full flex-col gap-4">
+        <div className="overflow-hidden rounded-2xl border border-[#2F6E9E]/10 bg-[linear-gradient(145deg,_rgba(47,110,158,0.06),_rgba(47,166,163,0.06))]">
           {photoUrl ? (
             <>
               <img
                 src={photoUrl}
                 alt={medicamentName}
-                className="h-40 w-full object-cover transition duration-500 hover:scale-[1.02]"
+                className="h-28 w-full object-cover transition duration-500 hover:scale-[1.02]"
                 onError={(event) => {
                   event.currentTarget.style.display = "none";
                   const fallback = event.currentTarget.nextElementSibling;
@@ -42,18 +41,18 @@ function MedicamentCard({ stock, onReserve }) {
                   }
                 }}
               />
-              <div className="hidden h-40 items-center justify-center text-[#2F6E9E]">
-                <FontAwesomeIcon icon={faCapsules} className="text-4xl" />
+              <div className="hidden h-28 items-center justify-center text-[#2F6E9E]">
+                <FontAwesomeIcon icon={faCapsules} className="text-3xl" />
               </div>
             </>
           ) : null}
 
           <div
             className={`items-center justify-center text-[#2F6E9E] ${
-              photoUrl ? "hidden h-40" : "flex h-40"
+              photoUrl ? "hidden h-28" : "flex h-28"
             }`}
           >
-            <FontAwesomeIcon icon={faCapsules} className="text-4xl" />
+            <FontAwesomeIcon icon={faCapsules} className="text-3xl" />
           </div>
         </div>
 
@@ -65,20 +64,16 @@ function MedicamentCard({ stock, onReserve }) {
         </div>
 
         <div>
-          <h3 className="text-xl font-black tracking-tight text-[#16324A]">
+          <h3 className="line-clamp-1 text-lg font-black tracking-tight text-[#16324A]">
             {medicamentName}
           </h3>
-          <p className="mt-2 text-sm leading-7 text-pharmaTextLight">
+          <p className="mt-2 line-clamp-2 text-sm leading-6 text-pharmaTextLight">
             {medicamentDescription}
           </p>
         </div>
 
-        <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[#F7FBFD] p-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#2F6E9E]">
-            <FontAwesomeIcon icon={faShieldHeart} />
-            <span>Informations publiques du stock</span>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[#F7FBFD] p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl bg-white px-3 py-3">
               <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-[#2F6E9E]">
                 <FontAwesomeIcon icon={faCoins} />

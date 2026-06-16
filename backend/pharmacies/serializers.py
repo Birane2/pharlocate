@@ -1,5 +1,8 @@
-from rest_framework import serializers
+from decimal import Decimal
 import re
+import urllib.request
+
+from rest_framework import serializers
 from django.db.models import Q
 from django.utils import timezone
 
@@ -8,9 +11,59 @@ from reviews.models import Avis
 from .models import Pharmacy, Horaire
 from .validators import (
     CoordinateDecimalField,
+    round_coordinate_decimal,
     validate_latitude_value,
     validate_longitude_value,
 )
+
+
+_GOOGLE_MAPS_DOMAIN_RE = re.compile(
+    r'(maps\.google\.com|google\.com/maps|goo\.gl/maps|maps\.app\.goo\.gl)',
+    re.IGNORECASE,
+)
+_Q_PARAM_RE = re.compile(r'[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)')
+_AT_RE = re.compile(r'@(-?\d+\.?\d*),(-?\d+\.?\d*)')
+_LL_PARAM_RE = re.compile(r'[?&]ll=(-?\d+\.?\d*),(-?\d+\.?\d*)')
+_SHORT_URL_RE = re.compile(r'(goo\.gl|maps\.app\.goo\.gl)', re.IGNORECASE)
+
+
+def extract_coords_from_maps_url(url):
+    """Return (latitude, longitude) floats from a Google Maps URL, or (None, None)."""
+    if not url:
+        return None, None
+
+    url = url.strip()
+
+    # ?q=lat,lng
+    m = _Q_PARAM_RE.search(url)
+    if m:
+        return float(m.group(1)), float(m.group(2))
+
+    # @lat,lng
+    m = _AT_RE.search(url)
+    if m:
+        return float(m.group(1)), float(m.group(2))
+
+    # ll=lat,lng
+    m = _LL_PARAM_RE.search(url)
+    if m:
+        return float(m.group(1)), float(m.group(2))
+
+    # Short URL → follow redirect then retry
+    if _SHORT_URL_RE.search(url):
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={'User-Agent': 'Mozilla/5.0 (compatible; PharmaLocate/1.0)'},
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                final_url = resp.geturl()
+            if final_url and final_url != url:
+                return extract_coords_from_maps_url(final_url)
+        except Exception:
+            pass
+
+    return None, None
 
 
 class HoraireSerializer(serializers.ModelSerializer):
@@ -268,6 +321,12 @@ class PharmacyProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     latitude = CoordinateDecimalField(coordinate_label='Latitude')
     longitude = CoordinateDecimalField(coordinate_label='Longitude')
+    google_maps_url = serializers.URLField(
+        max_length=500,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+    )
 
     class Meta:
         model = Pharmacy
@@ -278,6 +337,7 @@ class PharmacyProfileSerializer(serializers.ModelSerializer):
             'adresse',
             'latitude',
             'longitude',
+            'google_maps_url',
             'telephone',
             'photo',
             'est_valide',
@@ -313,6 +373,49 @@ class PharmacyProfileSerializer(serializers.ModelSerializer):
                 'Le telephone doit etre valide.'
             )
         return value
+
+    def validate_google_maps_url(self, value):
+        if not value:
+            return value
+        if not _GOOGLE_MAPS_DOMAIN_RE.search(value):
+            raise serializers.ValidationError(
+                'Veuillez coller un lien Google Maps valide '
+                '(ex: maps.google.com ou maps.app.goo.gl).'
+            )
+        return value
+
+    def validate(self, attrs):
+        google_maps_url = attrs.get('google_maps_url')
+
+        # If URL cleared → clear coordinates too
+        if google_maps_url == '' or google_maps_url is None:
+            if 'google_maps_url' in attrs:
+                attrs['latitude'] = None
+                attrs['longitude'] = None
+            return attrs
+
+        if google_maps_url:
+            lat, lng = extract_coords_from_maps_url(google_maps_url)
+            if lat is None or lng is None:
+                raise serializers.ValidationError({
+                    'google_maps_url': (
+                        'Impossible d\'extraire les coordonnees GPS de ce lien. '
+                        'Utilisez un lien complet Google Maps contenant la position '
+                        'precise (ex: https://maps.google.com/?q=18.07,-15.95).'
+                    )
+                })
+            try:
+                lat_dec = round_coordinate_decimal(Decimal(str(lat)))
+                lng_dec = round_coordinate_decimal(Decimal(str(lng)))
+                validate_latitude_value(lat_dec)
+                validate_longitude_value(lng_dec)
+            except serializers.ValidationError as exc:
+                raise serializers.ValidationError({'google_maps_url': exc.detail})
+
+            attrs['latitude'] = lat_dec
+            attrs['longitude'] = lng_dec
+
+        return attrs
 
 
 class PharmacyPhotoSerializer(serializers.ModelSerializer):

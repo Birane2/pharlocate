@@ -2,17 +2,22 @@ import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 
 function money(value) {
-  const numericValue = Number(value || 0);
-  return `${numericValue.toFixed(2)} MRU`;
+  return `${Number(value || 0).toFixed(2)} MRU`;
 }
 
-function Row({ label, value, strong = false }) {
+function Row({ label, value, strong = false, dimmed = false }) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-sm text-[#6B7280]">{label}</span>
+    <div className="flex items-center justify-between gap-3">
+      <span className={`text-xs ${dimmed ? "text-[#9CA3AF]" : "text-[#6B7280]"}`}>
+        {label}
+      </span>
       <span
-        className={`text-sm ${
-          strong ? "text-lg font-black text-[#1C2B4A]" : "font-bold text-[#1C2B4A]"
+        className={`text-right text-xs ${
+          strong
+            ? "text-sm font-black text-[#1C2B4A]"
+            : dimmed
+              ? "font-semibold text-[#9CA3AF]"
+              : "font-bold text-[#1C2B4A]"
         }`}
       >
         {value}
@@ -24,42 +29,74 @@ function Row({ label, value, strong = false }) {
 function OrderSummary({
   totalItems,
   medicinesAmount,
-  deliveryFee = 0,
+  deliveryFee,
+  deliveryFeeLoading = false,
   reservationType,
   paymentMethod,
   submitting,
   onSubmit,
 }) {
-  const totalAmount = Number(medicinesAmount || 0) + Number(deliveryFee || 0);
+  const isDelivery = reservationType === "livraison";
+  const feeKnown = isDelivery ? deliveryFee !== null : true;
+  const resolvedFee = isDelivery ? (deliveryFee ?? 0) : 0;
+  const totalAmount = Number(medicinesAmount || 0) + resolvedFee;
+
+  let deliveryFeeDisplay;
+  let deliveryFeeDimmed = false;
+
+  if (!isDelivery) {
+    deliveryFeeDisplay = "0.00 MRU";
+  } else if (deliveryFeeLoading) {
+    deliveryFeeDisplay = "Calcul en cours...";
+    deliveryFeeDimmed = true;
+  } else if (deliveryFee === null) {
+    deliveryFeeDisplay = "Non calcule";
+    deliveryFeeDimmed = true;
+  } else {
+    deliveryFeeDisplay = money(deliveryFee);
+  }
 
   return (
-    <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[linear-gradient(180deg,_#F8FBFF,_#FFFFFF)] p-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-base font-black text-[#1C2B4A]">Resume commande</p>
-          <p className="mt-1 text-sm text-[#6B7280]">
-            {totalItems} medicament(s) selectionne(s)
-          </p>
-        </div>
-        <Badge variant={reservationType === "livraison" ? "info" : "blue"}>
-          {reservationType === "livraison" ? "Livraison" : "Retrait"}
+    <div className="rounded-2xl border border-[#2F6E9E]/10 bg-gradient-to-b from-[#F8FBFF] to-white p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-black text-[#1C2B4A]">Resume commande</p>
+        <Badge variant={isDelivery ? "info" : "blue"}>
+          {isDelivery ? "Livraison" : "Retrait"}
         </Badge>
       </div>
 
-      <div className="mt-5 space-y-3">
+      {totalItems > 0 && (
+        <p className="mt-0.5 text-[11px] text-[#6B7280]">
+          {totalItems} medicament(s) selectionne(s)
+        </p>
+      )}
+
+      <div className="mt-3 space-y-1.5">
         <Row label="Medicaments" value={money(medicinesAmount)} />
-        {reservationType === "livraison" && (
-          <Row label="Frais livraison" value="Calcules par la pharmacie" />
-        )}
+        <Row
+          label="Frais livraison"
+          value={deliveryFeeDisplay}
+          dimmed={deliveryFeeDimmed}
+        />
         <Row label="Paiement" value={paymentMethod?.name || "-"} />
-        <div className="border-t border-[#E2E8F2] pt-3">
-          <Row label="Total estime" value={money(totalAmount)} strong />
+        <div className="border-t border-[#E2E8F2] pt-2">
+          <Row
+            label="Total"
+            value={feeKnown ? money(totalAmount) : money(medicinesAmount) + " *"}
+            strong
+            dimmed={!feeKnown}
+          />
+          {!feeKnown && (
+            <p className="mt-1 text-[10px] text-[#9CA3AF]">
+              * Hors frais de livraison non encore calcules
+            </p>
+          )}
         </div>
       </div>
 
       <Button
         type="button"
-        className="mt-5 w-full"
+        className="mt-3 w-full"
         loading={submitting}
         onClick={onSubmit}
       >

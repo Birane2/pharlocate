@@ -144,6 +144,7 @@ def change_delivery_status(delivery, nouveau_statut, changed_by=None, commentair
     transitions = {
         Delivery.STATUS_PENDING: {
             Delivery.STATUS_IN_PROGRESS,
+            Delivery.STATUS_DELIVERED,
             Delivery.STATUS_CANCELLED,
         },
         Delivery.STATUS_IN_PROGRESS: {

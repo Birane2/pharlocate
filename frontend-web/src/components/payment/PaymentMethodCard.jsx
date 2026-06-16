@@ -36,7 +36,7 @@ function PaymentMethodCard({
       disabled={isDisabled}
       onClick={handleClick}
       aria-pressed={selected}
-      className={`flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition duration-300 disabled:cursor-not-allowed ${
+      className={`flex w-full items-center gap-3 rounded-2xl border p-2.5 text-left transition duration-300 disabled:cursor-not-allowed ${
         selected
           ? "border-[#2FA6A3] bg-[#E8F7F3] shadow-sm"
           : unavailable
@@ -45,7 +45,7 @@ function PaymentMethodCard({
       }`}
     >
       <span
-        className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br text-white ${
+        className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br text-white ${
           method.color || "from-[#2F6E9E] to-[#2FA6A3]"
         }`}
       >

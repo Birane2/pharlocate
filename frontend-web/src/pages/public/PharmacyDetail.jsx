@@ -16,7 +16,6 @@ import Navbar from "../../components/layout/Navbar";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
-import Logo from "../../components/ui/Logo";
 import { useAuth } from "../../context/AuthContext";
 import { createAvis } from "../../services/avisService";
 import { getPublicPharmacyDetail, getPublicMediaUrl } from "../../services/pharmacyService";
@@ -207,9 +206,16 @@ function PharmacyDetail() {
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(47,166,163,0.12),_transparent_26%),linear-gradient(180deg,_#f5fbff_0%,_#ffffff_48%,_#f7fcfb_100%)]">
       <Navbar />
 
-      <section className="mx-auto w-full max-w-7xl px-4 pb-8 pt-8 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <Logo className="h-14 sm:h-16" to="/" />
+      <section className="mx-auto w-full max-w-7xl px-4 pb-6 pt-5 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#2FA6A3]">
+              Fiche pharmacie
+            </p>
+            <h1 className="mt-1 text-2xl font-black text-[#1C2B4A]">
+              Details pharmacie
+            </h1>
+          </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button
               type="button"
@@ -230,7 +236,7 @@ function PharmacyDetail() {
           </div>
         </div>
 
-        <div className="mt-8">
+        <div className="mt-5">
           {loading ? (
             <Card hover={false}>
               <div className="py-16 text-center text-sm font-semibold text-pharmaBlue">
@@ -252,23 +258,7 @@ function PharmacyDetail() {
               </div>
             </Card>
           ) : (
-            <div className="space-y-8">
-              <div className="rounded-[2rem] border border-white/70 bg-[linear-gradient(135deg,_rgba(47,110,158,0.98),_rgba(47,166,163,0.92))] p-6 text-white shadow-[0_26px_80px_rgba(47,110,158,0.2)] sm:p-8">
-                <Badge
-                  variant="info"
-                  className="border border-white/10 bg-white/15 text-white ring-white/10"
-                >
-                  Fiche pharmacie publique
-                </Badge>
-                <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">
-                  Consultez toutes les informations utiles avant de vous deplacer.
-                </h1>
-                <p className="mt-4 max-w-3xl text-sm leading-7 text-white/85 sm:text-base">
-                  Horaires, avis, medicaments disponibles, reservation et itineraire:
-                  tout est rassemble sur cette page pour aider l'utilisateur a agir rapidement.
-                </p>
-              </div>
-
+            <div className="space-y-5">
               <PharmacyInfoCard
                 pharmacy={pharmacy}
                 photoUrl={getPublicMediaUrl(pharmacy.photo)}
@@ -277,7 +267,7 @@ function PharmacyDetail() {
                 medicamentsCount={stockSummary.availableItemsCount}
               />
 
-              <div className="grid gap-8 xl:grid-cols-[0.9fr_1.1fr]">
+              <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
                 <PharmacyHoraires horaires={pharmacy.horaires || []} />
                 <div id="pharmacy-reviews">
                   <PharmacyReviews
@@ -316,8 +306,8 @@ function PharmacyDetail() {
                 }
               >
                 {!stocksLoading && !stocksError && stocks.length > 0 && (
-                  <div className="mb-6 grid gap-4 lg:grid-cols-3">
-                    <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[#F7FBFD] p-4">
+                  <div className="mb-4 grid gap-3 lg:grid-cols-3">
+                    <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[#F7FBFD] p-3">
                       <p className="text-xs font-black uppercase tracking-[0.16em] text-[#2F6E9E]">
                         Produits visibles
                       </p>
@@ -325,7 +315,7 @@ function PharmacyDetail() {
                         {stocks.length}
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[#F7FBFD] p-4">
+                    <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[#F7FBFD] p-3">
                       <p className="text-xs font-black uppercase tracking-[0.16em] text-[#2F6E9E]">
                         Disponibles
                       </p>
@@ -333,7 +323,7 @@ function PharmacyDetail() {
                         {stockSummary.availableItemsCount}
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[#F7FBFD] p-4">
+                    <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[#F7FBFD] p-3">
                       <p className="text-xs font-black uppercase tracking-[0.16em] text-[#2F6E9E]">
                         Quantite totale
                       </p>
@@ -371,7 +361,7 @@ function PharmacyDetail() {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {stocks.map((stock) => (
                       <MedicamentCard
                         key={stock.id_stock}

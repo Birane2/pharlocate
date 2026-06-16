@@ -3,20 +3,17 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faClinicMedical,
+  faFilter,
   faMagnifyingGlass,
   faRotateRight,
+  faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import Pagination from "../../components/common/Pagination";
 import Navbar from "../../components/layout/Navbar";
 import PharmacyCard from "../../components/pharmacies/PharmacyCard";
-import Badge from "../../components/ui/Badge";
-import Button from "../../components/ui/Button";
-import Card from "../../components/ui/Card";
-import Input from "../../components/ui/Input";
-import Logo from "../../components/ui/Logo";
 import { getPharmacies } from "../../services/pharmacyService";
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 8;
 
 const emptyPagination = {
   count: 0,
@@ -46,39 +43,27 @@ function PharmacyList() {
   const [searchInput, setSearchInput] = useState(searchParams.get("search") || "");
   const [pharmacies, setPharmacies] = useState([]);
   const [pagination, setPagination] = useState(emptyPagination);
-  const [page, setPage] = useState(Number(searchParams.get("page")) || 1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const page = Number(searchParams.get("page")) || 1;
   const estGarde = searchParams.get("est_garde") === "true";
   const isOpen = searchParams.get("is_open") === "true";
   const totalPages = Math.max(1, Math.ceil(pagination.count / PAGE_SIZE));
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
-
-    if (searchParams.get("search")) {
-      count += 1;
-    }
-
-    if (estGarde) {
-      count += 1;
-    }
-
-    if (isOpen) {
-      count += 1;
-    }
-
+    if (searchParams.get("search")) count += 1;
+    if (estGarde) count += 1;
+    if (isOpen) count += 1;
     return count;
   }, [searchParams, estGarde, isOpen]);
 
   useEffect(() => {
-    setSearchInput(searchParams.get("search") || "");
-  }, [searchParams]);
-
-  useEffect(() => {
-    const nextPage = Number(searchParams.get("page")) || 1;
-    setPage(nextPage);
+    const id = window.setTimeout(() => {
+      setSearchInput(searchParams.get("search") || "");
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [searchParams]);
 
   useEffect(() => {
@@ -93,22 +78,12 @@ function PharmacyList() {
           page: Number(searchParams.get("page")) || 1,
           page_size: PAGE_SIZE,
         };
-
         const search = searchParams.get("search");
         const garde = searchParams.get("est_garde");
         const open = searchParams.get("is_open");
-
-        if (search) {
-          params.search = search;
-        }
-
-        if (garde) {
-          params.est_garde = garde;
-        }
-
-        if (open) {
-          params.is_open = open;
-        }
+        if (search) params.search = search;
+        if (garde) params.est_garde = garde;
+        if (open) params.is_open = open;
 
         const data = await getPharmacies(params);
 
@@ -123,22 +98,16 @@ function PharmacyList() {
           setPharmacies([]);
         }
       } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
+        if (isMounted) setLoading(false);
       }
     };
 
     loadPharmacies();
-
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [searchParams]);
 
   const updateFilters = (updates) => {
     const nextParams = new URLSearchParams(searchParams);
-
     Object.entries(updates).forEach(([key, value]) => {
       if (value === "" || value === null || value === undefined || value === false) {
         nextParams.delete(key);
@@ -146,7 +115,6 @@ function PharmacyList() {
         nextParams.set(key, String(value));
       }
     });
-
     nextParams.set("page", "1");
     setSearchParams(nextParams);
   };
@@ -172,170 +140,165 @@ function PharmacyList() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(47,166,163,0.12),_transparent_28%),linear-gradient(180deg,_#f5fbff_0%,_#ffffff_44%,_#f7fcfb_100%)]">
+    <div className="min-h-screen bg-[#F8FAFC]">
       <Navbar />
 
-      <section className="mx-auto w-full max-w-7xl px-4 pb-8 pt-8 sm:px-6 lg:px-8">
-        <div className="rounded-[2rem] border border-white/70 bg-[linear-gradient(135deg,_rgba(47,110,158,0.98),_rgba(47,166,163,0.92))] p-6 text-white shadow-[0_26px_80px_rgba(47,110,158,0.2)] sm:p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <Logo className="h-14 sm:h-16" to="/" />
-              <Badge
-                variant="info"
-                className="mt-5 border border-white/10 bg-white/15 text-white ring-white/10"
-              >
-                Annuaire public PharmaLocate
-              </Badge>
-              <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
-                Toutes les pharmacies publiques validees en un seul endroit.
-              </h1>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/85 sm:text-base">
-                Recherchez une pharmacie par nom, adresse ou telephone, puis filtrez
-                les etablissements de garde ou actuellement ouverts.
-              </p>
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="border-white bg-white/10 text-white hover:bg-white hover:text-[#2F6E9E]"
-              icon={faRotateRight}
-              onClick={() => handlePageChange(page)}
-              loading={loading}
-            >
-              Actualiser
-            </Button>
+      {/* Hero compact */}
+      <div className="border-b border-[#2F6E9E]/15 bg-gradient-to-r from-[#2F6E9E] to-[#2FA6A3]">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/65">
+              Annuaire PharmaLocate
+            </p>
+            <h1 className="mt-0.5 text-xl font-black tracking-tight text-white sm:text-2xl">
+              Trouvez une pharmacie proche
+            </h1>
+            <p className="mt-0.5 text-[12px] text-white/75">
+              Recherchez, filtrez et consultez les fiches en quelques secondes.
+            </p>
           </div>
+
+          <button
+            type="button"
+            onClick={() => handlePageChange(page)}
+            disabled={loading}
+            className="hidden shrink-0 items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/20 disabled:opacity-50 sm:flex"
+          >
+            <FontAwesomeIcon icon={faRotateRight} className={loading ? "animate-spin" : ""} />
+            Actualiser
+          </button>
         </div>
-      </section>
+      </div>
 
-      <section className="mx-auto w-full max-w-7xl px-4 pb-20 sm:px-6 lg:px-8">
-        <Card
-          hover={false}
-          className="border-[#2F6E9E]/10 bg-white/92 shadow-[0_18px_52px_rgba(47,110,158,0.1)]"
-          bodyClassName="space-y-5"
-        >
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <h2 className="text-xl font-black tracking-tight text-[#16324A]">
-                Rechercher une pharmacie
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-pharmaTextLight">
-                Utilisez les filtres disponibles pour trouver plus vite une pharmacie visible.
-              </p>
-            </div>
+      {/* Contenu principal */}
+      <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6">
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="blue">{pagination.count} resultat(s)</Badge>
-              {activeFiltersCount > 0 && (
-                <Badge variant="info">{activeFiltersCount} filtre(s) actif(s)</Badge>
-              )}
-            </div>
-          </div>
-
-          <form onSubmit={handleSearchSubmit} className="space-y-5">
-            <div className="flex flex-col gap-4 lg:flex-row">
-              <Input
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Rechercher par nom, adresse ou telephone"
-                className="flex-1"
-                helperText="La recherche s'appuie sur les donnees publiques de la pharmacie."
-              />
-              <Button type="submit" icon={faMagnifyingGlass} className="lg:min-w-[220px]">
+        {/* Carte recherche + filtres fusionnee */}
+        <div className="rounded-2xl border border-[#E2E8F2] bg-white p-3 shadow-sm">
+          <form onSubmit={handleSearchSubmit}>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="relative flex-1">
+                <FontAwesomeIcon
+                  icon={faMagnifyingGlass}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#9CA3AF]"
+                />
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Rechercher par nom, adresse ou telephone..."
+                  className="w-full rounded-xl border border-[#E2E8F2] bg-[#F8FAFC] py-2 pl-8 pr-3 text-sm text-[#1C2B4A] placeholder-[#9CA3AF] transition focus:border-[#2F6E9E]/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#2F6E9E]/12"
+                />
+              </div>
+              <button
+                type="submit"
+                className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#2F6E9E] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#255C86] active:scale-95"
+              >
+                <FontAwesomeIcon icon={faMagnifyingGlass} />
                 Rechercher
-              </Button>
+              </button>
             </div>
 
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex flex-wrap gap-3">
-                <Button
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <FontAwesomeIcon icon={faFilter} className="text-[10px] text-[#9CA3AF]" />
+                <button
                   type="button"
-                  variant={estGarde ? "secondary" : "outline"}
-                  size="sm"
                   onClick={() => updateFilters({ est_garde: estGarde ? null : "true" })}
+                  className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
+                    estGarde
+                      ? "bg-[#2F6E9E] text-white shadow-sm"
+                      : "border border-[#E2E8F2] bg-white text-[#6B7280] hover:border-[#2F6E9E]/30 hover:text-[#2F6E9E]"
+                  }`}
                 >
-                  {estGarde ? "Garde activee" : "Pharmacie de garde"}
-                </Button>
-                <Button
+                  De garde
+                </button>
+                <button
                   type="button"
-                  variant={isOpen ? "secondary" : "outline"}
-                  size="sm"
                   onClick={() => updateFilters({ is_open: isOpen ? null : "true" })}
+                  className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-all ${
+                    isOpen
+                      ? "bg-[#2FA6A3] text-white shadow-sm"
+                      : "border border-[#E2E8F2] bg-white text-[#6B7280] hover:border-[#2FA6A3]/30 hover:text-[#2FA6A3]"
+                  }`}
                 >
-                  {isOpen ? "Ouverte activee" : "Ouverte maintenant"}
-                </Button>
-                <Button type="button" variant="ghost" size="sm" onClick={handleReset}>
-                  Reinitialiser
-                </Button>
+                  Ouverte maintenant
+                </button>
+                {activeFiltersCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-500 transition hover:bg-red-100"
+                  >
+                    <FontAwesomeIcon icon={faXmark} className="text-[10px]" />
+                    Reinitialiser
+                  </button>
+                )}
               </div>
 
-              <div className="rounded-2xl border border-[#E2E8F2] bg-[#F8FBFF] px-4 py-3 text-sm text-[#6B7A99]">
-                Page <span className="font-bold text-[#16324A]">{page}</span> sur{" "}
-                <span className="font-bold text-[#16324A]">{totalPages}</span>
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="rounded-lg bg-[#EEF4FA] px-2.5 py-1 font-bold text-[#2F6E9E]">
+                  {pagination.count} pharmacie{pagination.count !== 1 ? "s" : ""}
+                </span>
+                {totalPages > 1 && (
+                  <span className="text-[#9CA3AF]">
+                    Page {page}/{totalPages}
+                  </span>
+                )}
               </div>
             </div>
           </form>
-        </Card>
+        </div>
 
+        {/* Erreur */}
         {error && (
-          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-medium text-red-700">
             {error}
           </div>
         )}
 
-        {!error && !loading && pharmacies.length > 0 && (
-          <div className="mt-6 rounded-[1.5rem] border border-[#2F6E9E]/10 bg-[linear-gradient(180deg,_rgba(247,251,253,0.96),_rgba(255,255,255,0.98))] px-4 py-4 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-black tracking-tight text-[#16324A]">
-                  Resultats publics
-                </p>
-                <p className="mt-1 text-sm text-pharmaTextLight">
-                  Consultez les pharmacies visibles et ouvrez leur fiche detaillee.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {estGarde && <Badge variant="info">Filtre garde</Badge>}
-                {isOpen && <Badge variant="active">Filtre ouverte</Badge>}
-              </div>
-            </div>
-          </div>
-        )}
-
+        {/* Grille */}
         {loading ? (
-          <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {[1, 2, 3, 4, 5, 6].map((item) => (
-              <Card key={item} hover={false} className="animate-pulse">
-                <div className="space-y-4">
-                  <div className="h-6 w-28 rounded-full bg-[#2F6E9E]/10" />
-                  <div className="h-8 w-3/4 rounded-full bg-[#2F6E9E]/10" />
-                  <div className="h-4 w-full rounded-full bg-[#2F6E9E]/10" />
-                  <div className="h-4 w-5/6 rounded-full bg-[#2F6E9E]/10" />
-                  <div className="h-11 w-full rounded-2xl bg-[#2F6E9E]/10" />
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: PAGE_SIZE }).map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse overflow-hidden rounded-2xl border border-[#E2E8F2] bg-white"
+              >
+                <div className="h-[128px] bg-[#EEF4FA]" />
+                <div className="space-y-2 p-3">
+                  <div className="h-3.5 w-3/4 rounded-full bg-[#EEF4FA]" />
+                  <div className="h-3 w-full rounded-full bg-[#EEF4FA]" />
+                  <div className="h-3 w-1/2 rounded-full bg-[#EEF4FA]" />
+                  <div className="mt-2 h-8 w-full rounded-xl bg-[#EEF4FA]" />
                 </div>
-              </Card>
+              </div>
             ))}
           </div>
         ) : pharmacies.length === 0 ? (
-          <Card hover={false} className="mt-8">
-            <div className="py-10 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#35C3A3]/15 text-[#13795f]">
-                <FontAwesomeIcon icon={faClinicMedical} />
-              </div>
-              <h2 className="mt-4 text-xl font-semibold text-pharmaText">
-                Aucune pharmacie trouvee
-              </h2>
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-pharmaTextLight">
-                Ajustez votre recherche ou desactivez les filtres pour voir plus de
-                resultats publics.
-              </p>
+          <div className="mt-4 flex flex-col items-center justify-center rounded-2xl border border-[#E2E8F2] bg-white py-14 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EEF4FA] text-[#2F6E9E]">
+              <FontAwesomeIcon icon={faClinicMedical} className="text-xl" />
             </div>
-          </Card>
+            <h2 className="mt-3 text-base font-bold text-[#1C2B4A]">
+              Aucune pharmacie trouvee
+            </h2>
+            <p className="mt-1 max-w-xs text-xs leading-5 text-[#6B7280]">
+              Ajustez votre recherche ou desactivez les filtres pour voir plus de resultats.
+            </p>
+            {activeFiltersCount > 0 && (
+              <button
+                type="button"
+                onClick={handleReset}
+                className="mt-3 rounded-xl border border-[#E2E8F2] bg-white px-4 py-2 text-xs font-bold text-[#2F6E9E] transition hover:bg-[#EEF4FA]"
+              >
+                Reinitialiser les filtres
+              </button>
+            )}
+          </div>
         ) : (
           <>
-            <div className="mt-8 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {pharmacies.map((pharmacy) => (
                 <PharmacyCard
                   key={pharmacy.id}
@@ -345,7 +308,7 @@ function PharmacyList() {
               ))}
             </div>
 
-            <div className="mt-8">
+            <div className="mt-4 pb-6">
               <Pagination
                 page={page}
                 totalPages={totalPages}
@@ -357,7 +320,7 @@ function PharmacyList() {
             </div>
           </>
         )}
-      </section>
+      </div>
     </div>
   );
 }

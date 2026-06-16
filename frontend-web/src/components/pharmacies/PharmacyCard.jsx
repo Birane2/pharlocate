@@ -1,107 +1,124 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faArrowRight,
-  faClock,
+  faClinicMedical,
   faLocationDot,
   faPhone,
-  faShieldHeart,
+  faRoute,
 } from "@fortawesome/free-solid-svg-icons";
-import Badge from "../ui/Badge";
-import Button from "../ui/Button";
-import Card from "../ui/Card";
+import { getPublicMediaUrl } from "../../services/pharmacyService";
 
-function getAreaLabel(address) {
-  if (!address) {
-    return "Quartier non renseigne";
+function getDistanceLabel(pharmacy) {
+  const distance =
+    pharmacy.distance_km ?? pharmacy.distanceKm ?? pharmacy.distance ?? null;
+
+  if (distance === null || distance === undefined || distance === "") {
+    return null;
   }
 
-  const [area] = String(address).split(",");
-  return area?.trim() || "Quartier non renseigne";
+  const numericDistance = Number(distance);
+
+  if (Number.isNaN(numericDistance)) {
+    return String(distance);
+  }
+
+  return `${numericDistance.toFixed(numericDistance < 10 ? 1 : 0)} km`;
 }
 
 function PharmacyCard({ pharmacy, onViewDetails }) {
-  const areaLabel = getAreaLabel(pharmacy.adresse);
-  const hasCoordinates =
-    pharmacy.latitude !== null &&
-    pharmacy.latitude !== undefined &&
-    pharmacy.longitude !== null &&
-    pharmacy.longitude !== undefined;
+  const photoUrl = getPublicMediaUrl(pharmacy.photo);
+  const distanceLabel = getDistanceLabel(pharmacy);
+  const phone = pharmacy.telephone || pharmacy.phone || pharmacy.phone_number;
 
   return (
-    <Card className="h-full border-[#2F6E9E]/10 bg-white/95">
-      <div className="flex h-full flex-col gap-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="success" showIcon>
-            Validee
-          </Badge>
-          <Badge variant={pharmacy.is_open ? "active" : "warning"} showIcon>
+    <div className="group flex flex-col overflow-hidden rounded-2xl border border-[#E2E8F2] bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[#2F6E9E]/20 hover:shadow-md">
+
+      {/* Photo avec badges en overlay */}
+      <div className="relative h-[128px] shrink-0 overflow-hidden bg-[#EEF4FA]">
+        {photoUrl ? (
+          <img
+            src={photoUrl}
+            alt={pharmacy.nom}
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-1.5 text-[#2F6E9E]/25">
+            <FontAwesomeIcon icon={faClinicMedical} className="text-4xl" />
+          </div>
+        )}
+
+        {/* Badges statut en overlay bas-gauche */}
+        <div className="absolute bottom-2 left-2 flex flex-wrap gap-1">
+          <span
+            className={`rounded-full px-2 py-0.5 text-[10px] font-bold shadow-sm backdrop-blur-sm ${
+              pharmacy.is_open
+                ? "bg-emerald-500/90 text-white"
+                : "bg-amber-500/90 text-white"
+            }`}
+          >
             {pharmacy.is_open ? "Ouverte" : "Fermee"}
-          </Badge>
+          </span>
           {pharmacy.est_garde && (
-            <Badge variant="info" showIcon>
-              De garde
-            </Badge>
+            <span className="rounded-full bg-[#2F6E9E]/90 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm backdrop-blur-sm">
+              Garde
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Contenu */}
+      <div className="flex flex-1 flex-col gap-2 p-3">
+
+        {/* Nom + adresse */}
+        <div className="min-w-0">
+          <h2 className="line-clamp-1 text-[13px] font-bold leading-snug text-[#1C2B4A]">
+            {pharmacy.nom}
+          </h2>
+          <p className="mt-0.5 flex items-start gap-1.5 text-[11px] leading-snug text-[#6B7280]">
+            <FontAwesomeIcon
+              icon={faLocationDot}
+              className="mt-0.5 shrink-0 text-[#2F6E9E]"
+              style={{ fontSize: "10px" }}
+            />
+            <span className="line-clamp-1">{pharmacy.adresse || "Adresse non renseignee"}</span>
+          </p>
+        </div>
+
+        {/* Telephone + distance */}
+        <div className="flex flex-col gap-1">
+          {phone && (
+            <p className="flex items-center gap-1.5 text-[11px] text-[#6B7280]">
+              <FontAwesomeIcon
+                icon={faPhone}
+                className="shrink-0 text-[#2FA6A3]"
+                style={{ fontSize: "10px" }}
+              />
+              <span className="truncate">{phone}</span>
+            </p>
+          )}
+          {distanceLabel && (
+            <p className="flex items-center gap-1.5 text-[11px] text-[#6B7280]">
+              <FontAwesomeIcon
+                icon={faRoute}
+                className="shrink-0 text-[#2F6E9E]"
+                style={{ fontSize: "10px" }}
+              />
+              <span>{distanceLabel}</span>
+            </p>
           )}
         </div>
 
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#2F6E9E]">
-            {areaLabel}
-          </p>
-          <h2 className="mt-2 text-xl font-black tracking-tight text-[#16324A]">
-            {pharmacy.nom}
-          </h2>
-          <p className="mt-3 flex items-start gap-3 text-sm leading-7 text-pharmaTextLight">
-            <FontAwesomeIcon
-              icon={faLocationDot}
-              className="mt-1 text-[#2F6E9E]"
-            />
-            <span>{pharmacy.adresse}</span>
-          </p>
-          <p className="mt-2 flex items-center gap-3 text-sm text-pharmaTextLight">
-            <FontAwesomeIcon icon={faPhone} className="text-[#2FA6A3]" />
-            <span>{pharmacy.telephone}</span>
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-[#2F6E9E]/10 bg-[#F7FBFD] p-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#2F6E9E]">
-            <FontAwesomeIcon icon={faShieldHeart} />
-            <span>Visibilite publique securisee</span>
-          </div>
-          <p className="mt-2 text-sm leading-6 text-pharmaTextLight">
-            Cette pharmacie est visible car elle a ete validee par l'administration.
-          </p>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {pharmacy.est_garde && (
-              <span className="inline-flex items-center gap-2 rounded-full bg-[#2FA6A3]/10 px-3 py-1 text-xs font-semibold text-[#13795f]">
-                <FontAwesomeIcon icon={faClock} />
-                Service de garde signale
-              </span>
-            )}
-            {hasCoordinates && (
-              <span className="inline-flex items-center gap-2 rounded-full bg-[#2F6E9E]/10 px-3 py-1 text-xs font-semibold text-[#2F6E9E]">
-                Coordonnees disponibles
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-auto">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full"
-            icon={faArrowRight}
-            iconPosition="right"
-            onClick={() => onViewDetails(pharmacy)}
-          >
-            Voir details
-          </Button>
-        </div>
+        {/* Bouton */}
+        <button
+          type="button"
+          onClick={() => onViewDetails(pharmacy)}
+          className="mt-auto flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#2F6E9E]/15 bg-[#F0F6FC] py-2 text-[11px] font-bold text-[#2F6E9E] transition-all duration-200 hover:border-[#2F6E9E]/40 hover:bg-[#2F6E9E] hover:text-white"
+        >
+          Voir details
+          <FontAwesomeIcon icon={faArrowRight} style={{ fontSize: "9px" }} />
+        </button>
       </div>
-    </Card>
+    </div>
   );
 }
 

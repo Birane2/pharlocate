@@ -14,6 +14,8 @@ export const checkoutReservation = async ({
   transactionId,
   paymentProof,
   delivery,
+  fraisLivraison,
+  montantTotal,
 }) => {
   const formData = new FormData();
 
@@ -26,6 +28,14 @@ export const checkoutReservation = async ({
   formData.append("client_phone", clientPhone);
   formData.append("transaction_id", transactionId);
   formData.append("reference_paiement", transactionId);
+
+  if (fraisLivraison !== undefined && fraisLivraison !== null) {
+    formData.append("frais_livraison", String(fraisLivraison));
+  }
+
+  if (montantTotal !== undefined && montantTotal !== null) {
+    formData.append("montant_total", String(montantTotal));
+  }
 
   if (paymentProof) {
     formData.append("capture_paiement", paymentProof);
