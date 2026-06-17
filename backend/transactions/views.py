@@ -316,14 +316,42 @@ class PharmacienTransactionListView(generics.ListAPIView):
         )
 
 
+def _paginate_list(items, request, default_page_size=10):
+    try:
+        page = max(1, int(request.query_params.get('page', 1)))
+        page_size = max(1, min(100, int(request.query_params.get('page_size', default_page_size))))
+    except (TypeError, ValueError):
+        page = 1
+        page_size = default_page_size
+
+    total = len(items)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    page = min(page, total_pages)
+    start = (page - 1) * page_size
+    return {
+        'count': total,
+        'total_pages': total_pages,
+        'page': page,
+        'page_size': page_size,
+        'results': items[start: start + page_size],
+    }
+
+
 class AdminTransactionListView(generics.ListAPIView):
     serializer_class = AdminFinancialTransactionSerializer
     permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
 
     def list(self, request, *args, **kwargs):
         items = build_admin_financial_transactions(request)
-        serializer = self.get_serializer(items, many=True)
-        return Response(serializer.data)
+        page_data = _paginate_list(items, request)
+        serializer = self.get_serializer(page_data['results'], many=True)
+        return Response({
+            'count': page_data['count'],
+            'total_pages': page_data['total_pages'],
+            'page': page_data['page'],
+            'page_size': page_data['page_size'],
+            'results': serializer.data,
+        })
 
 
 class AdminTransactionDetailView(APIView):

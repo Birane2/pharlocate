@@ -51,7 +51,8 @@ export async function getPharmacienFinanceDashboard(params = {}) {
 
 export async function getPharmacienTransactions(params = {}) {
   const response = await API.get("/api/pharmacien/finance/transactions/", { params });
-  return normalizeList(response.data);
+  // Returns paginated object: { count, total_pages, page, page_size, results }
+  return response.data;
 }
 
 export async function getPharmacienPayments(params = {}) {
@@ -155,7 +156,8 @@ export async function getAdminFinanceDashboard(params = {}) {
 
 export async function getAdminTransactions(params = {}) {
   const response = await API.get("/api/admin/transactions/", { params });
-  return normalizeList(response.data);
+  // Returns paginated object: { count, total_pages, page, page_size, results }
+  return response.data;
 }
 
 export async function getAdminTransactionDetail(id) {
@@ -356,4 +358,65 @@ export async function adminRejectCommissionPayment(id, reason) {
     { reason }
   );
   return response.data;
+}
+
+// ── Transaction exports ───────────────────────────────────────────────────────
+
+function _triggerDownload(blob, filename) {
+  const url = window.URL.createObjectURL(new Blob([blob]));
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function exportPharmacistTransactionsPDF(params = {}) {
+  const response = await API.get("/api/pharmacien/transactions/export/pdf/", {
+    params,
+    responseType: "blob",
+  });
+  _triggerDownload(response.data, "transactions-pharmacie.pdf");
+}
+
+export async function exportPharmacistTransactionsExcel(params = {}) {
+  const response = await API.get("/api/pharmacien/transactions/export/excel/", {
+    params,
+    responseType: "blob",
+  });
+  _triggerDownload(response.data, "transactions-pharmacie.xlsx");
+}
+
+export async function exportPharmacistTransactionsWord(params = {}) {
+  const response = await API.get("/api/pharmacien/transactions/export/word/", {
+    params,
+    responseType: "blob",
+  });
+  _triggerDownload(response.data, "transactions-pharmacie.docx");
+}
+
+export async function exportAdminTransactionsPDF(params = {}) {
+  const response = await API.get("/api/admin/transactions/export/pdf/", {
+    params,
+    responseType: "blob",
+  });
+  _triggerDownload(response.data, "transactions-admin.pdf");
+}
+
+export async function exportAdminTransactionsExcel(params = {}) {
+  const response = await API.get("/api/admin/transactions/export/excel/", {
+    params,
+    responseType: "blob",
+  });
+  _triggerDownload(response.data, "transactions-admin.xlsx");
+}
+
+export async function exportAdminTransactionsWord(params = {}) {
+  const response = await API.get("/api/admin/transactions/export/word/", {
+    params,
+    responseType: "blob",
+  });
+  _triggerDownload(response.data, "transactions-admin.docx");
 }

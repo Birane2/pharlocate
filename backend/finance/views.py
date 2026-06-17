@@ -109,6 +109,15 @@ class PharmacienFinanceRevenuesView(FinanceFilterMixin, APIView):
         )
 
 
+_TRANSACTION_TYPE_LABELS = {
+    'paiement': 'Paiement réservation',
+    'commission': 'Commission',
+    'remboursement': 'Remboursement',
+    'ajustement': 'Ajustement',
+    'abonnement': 'Abonnement',
+}
+
+
 class PharmacienFinanceTransactionsView(FinanceFilterMixin, APIView):
     permission_classes = [IsAuthenticatedWithTokenMessage, IsPharmacien]
 
@@ -120,28 +129,79 @@ class PharmacienFinanceTransactionsView(FinanceFilterMixin, APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        date_range = get_date_range(self.get_validated_filters(request))
+        params = request.query_params
         queryset = Transaction.objects.filter(pharmacy=pharmacy).select_related(
-            'payment',
+            'payment__payment_method',
             'reservation',
             'user',
             'pharmacy',
+            'created_by',
         )
-        queryset = apply_date_filter(queryset, 'date_creation', date_range)
-        return Response(
-            [
-                {
-                    'id': transaction.id,
-                    'reference_transaction': transaction.reference_transaction,
-                    'type_transaction': transaction.type_transaction,
-                    'montant_brut': transaction.montant_brut,
-                    'commission': transaction.commission,
-                    'montant_pharmacie': transaction.montant_pharmacie,
-                    'date_creation': transaction.date_creation,
-                }
-                for transaction in queryset.order_by('-date_creation')[:100]
-            ]
-        )
+
+        start_date = params.get('start_date')
+        end_date = params.get('end_date')
+        if start_date:
+            queryset = queryset.filter(date_creation__date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(date_creation__date__lte=end_date)
+
+        type_filter = params.get('type_transaction')
+        if type_filter:
+            queryset = queryset.filter(type_transaction=type_filter)
+
+        search = params.get('search', '').strip()
+        if search:
+            queryset = queryset.filter(reference_transaction__icontains=search)
+
+        queryset = queryset.order_by('-date_creation')
+
+        # Pagination
+        try:
+            page = max(1, int(params.get('page', 1)))
+            page_size = max(1, min(100, int(params.get('page_size', 10))))
+        except (TypeError, ValueError):
+            page = 1
+            page_size = 10
+
+        total = queryset.count()
+        total_pages = max(1, (total + page_size - 1) // page_size)
+        page = min(page, total_pages)
+        transactions = queryset[(page - 1) * page_size: page * page_size]
+
+        def _user_name(user):
+            if not user:
+                return ''
+            return user.get_full_name() or getattr(user, 'phone_number', '') or user.username
+
+        results = [
+            {
+                'id': t.id,
+                'reference_transaction': t.reference_transaction,
+                'type_transaction': t.type_transaction,
+                'type_label': _TRANSACTION_TYPE_LABELS.get(t.type_transaction, t.type_transaction),
+                'montant_brut': t.montant_brut,
+                'commission': t.commission,
+                'montant_pharmacie': t.montant_pharmacie,
+                'description': t.description or '',
+                'user_name': _user_name(t.user),
+                'reservation_id': t.reservation_id,
+                'payment_method': (
+                    t.payment.payment_method.nom
+                    if t.payment_id and t.payment.payment_method_id
+                    else ''
+                ),
+                'date_creation': t.date_creation,
+            }
+            for t in transactions
+        ]
+
+        return Response({
+            'count': total,
+            'total_pages': total_pages,
+            'page': page,
+            'page_size': page_size,
+            'results': results,
+        })
 
 
 class PharmacienFinancePaymentsView(FinanceFilterMixin, APIView):
