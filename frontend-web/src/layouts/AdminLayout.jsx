@@ -41,6 +41,7 @@ function AdminLayout({
           onDateChange={onDateChange}
           onTodayClick={onTodayClick}
           onResetClick={onResetClick}
+          notificationsPath="/admin/notifications"
         />
 
         <section className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-6">

@@ -15,6 +15,7 @@ import {
 import { Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import Logo from "../ui/Logo";
+import NotificationBell from "../notifications/NotificationBell";
 
 function formatDisplayDate(value) {
   const dateValue = value || new Date().toISOString().slice(0, 10);
@@ -39,6 +40,7 @@ function Header({
   onDateChange,
   onTodayClick,
   onResetClick,
+  notificationsPath,
 }) {
   const { user, logout } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -119,6 +121,10 @@ function Header({
         </div>
 
         <div className="flex items-center gap-2">
+          {notificationsPath && (
+            <NotificationBell notificationsPath={notificationsPath} />
+          )}
+
           {isAdminDashboardHeader && (
             <div className="hidden items-center gap-2 md:flex">
               <label className="relative cursor-pointer items-center gap-3 rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-bold text-[#1C2B4A] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:flex">

@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  faBell,
   faBoxesStacked,
+  faCalendarCheck,
   faCheckCircle,
   faClock,
   faCreditCard,
+  faInfoCircle,
   faPills,
+  faShieldHalved,
   faStar,
+  faTruck,
   faTriangleExclamation,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -20,6 +25,7 @@ import DashboardLayout from "../../components/layout/DashboardLayout";
 import { pharmacistLinks } from "../../routes/dashboardLinks";
 import { getPharmacienDashboardStats } from "../../services/dashboardService";
 import { getPharmacienPaymentMethods } from "../../services/financeService";
+import { getNotifications, markAllNotificationsRead } from "../../services/notificationService";
 
 const emptyStats = {
   pharmacie: null,
@@ -94,11 +100,43 @@ function hasConfiguredPaymentMethod(config) {
   ].some((value) => String(value || "").trim().length > 0);
 }
 
+const NOTIF_ICONS = {
+  reservation: faCalendarCheck,
+  payment: faCreditCard,
+  delivery: faTruck,
+  subscription: faShieldHalved,
+  commission: faCreditCard,
+  system: faInfoCircle,
+};
+
+const NOTIF_COLORS = {
+  reservation: "text-[#2F6E9E] bg-[#2F6E9E]/10",
+  payment: "text-[#10B981] bg-[#10B981]/10",
+  delivery: "text-[#2FA6A3] bg-[#2FA6A3]/10",
+  subscription: "text-[#8B5CF6] bg-[#8B5CF6]/10",
+  commission: "text-[#F59E0B] bg-[#F59E0B]/10",
+  system: "text-[#6B7280] bg-[#6B7280]/10",
+};
+
+function formatRelativeDate(dateStr) {
+  if (!dateStr) return "";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "À l'instant";
+  if (mins < 60) return `Il y a ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Il y a ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return days < 7 ? `Il y a ${days} j` : new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short" }).format(new Date(dateStr));
+}
+
 function PharmacienDashboard() {
   const [stats, setStats] = useState(emptyStats);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showPaymentAlert, setShowPaymentAlert] = useState(false);
+  const [recentNotifs, setRecentNotifs] = useState([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
   const loadStats = async () => {
     setLoading(true);
@@ -119,6 +157,24 @@ function PharmacienDashboard() {
       setLoading(false);
     }
   };
+
+  const handleMarkAllNotifRead = async () => {
+    try {
+      await markAllNotificationsRead();
+      setRecentNotifs((prev) => prev.map((n) => ({ ...n, est_lue: true })));
+      setUnreadNotifCount(0);
+    } catch { /* silent */ }
+  };
+
+  // Load recent notifications once on mount
+  useEffect(() => {
+    getNotifications({ page: 1, page_size: 5 })
+      .then((data) => {
+        setRecentNotifs(data.results || []);
+        setUnreadNotifCount((data.results || []).filter((n) => !n.est_lue).length);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -292,6 +348,70 @@ function PharmacienDashboard() {
               stocks={stats.stocks}
               reservations={stats.reservations}
             />
+
+            {/* Recent notifications panel */}
+            <section className="dashboard-reveal rounded-2xl border border-[#E2E8F2] bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-[#E2E8F2] px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <FontAwesomeIcon icon={faBell} className="h-4 w-4 text-[#2F6E9E]" />
+                  <h2 className="text-sm font-bold text-[#1C2B4A]">Notifications récentes</h2>
+                  {unreadNotifCount > 0 && (
+                    <span className="rounded-full bg-[#EF4444]/10 px-2 py-0.5 text-[10px] font-black text-[#EF4444]">
+                      {unreadNotifCount} non lues
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {unreadNotifCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleMarkAllNotifRead}
+                      className="rounded-full bg-[#2FA6A3]/8 px-3 py-1.5 text-xs font-bold text-[#2FA6A3] transition hover:bg-[#2FA6A3] hover:text-white"
+                    >
+                      Tout lire
+                    </button>
+                  )}
+                  <Link
+                    to="/pharmacien/notifications"
+                    className="rounded-full bg-[#2F6E9E]/8 px-3 py-1.5 text-xs font-bold text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white"
+                  >
+                    Voir tout
+                  </Link>
+                </div>
+              </div>
+
+              {recentNotifs.length === 0 ? (
+                <p className="px-4 py-6 text-sm font-semibold text-[#6B7280]">Aucune notification récente.</p>
+              ) : (
+                <ul>
+                  {recentNotifs.map((notif) => {
+                    const iconKey = notif.notification_type || "system";
+                    const icon = NOTIF_ICONS[iconKey] || faInfoCircle;
+                    const colorClass = notif.type === "alerte"
+                      ? "text-[#EF4444] bg-[#EF4444]/10"
+                      : NOTIF_COLORS[iconKey] || NOTIF_COLORS.system;
+                    return (
+                      <li
+                        key={notif.id}
+                        className={`flex items-start gap-3 border-b border-[#F1F5F9] px-4 py-3 last:border-0 ${!notif.est_lue ? "bg-[#EFF6FF]" : ""}`}
+                      >
+                        <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${colorClass}`}>
+                          <FontAwesomeIcon icon={notif.type === "alerte" ? faTriangleExclamation : icon} className="h-3.5 w-3.5" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-[#1C2B4A]">{notif.titre || notif.title || "Notification"}</p>
+                          <p className="mt-0.5 truncate text-[11px] font-medium text-[#6B7280]">{notif.message}</p>
+                          <p className="mt-1 text-[10px] font-semibold text-[#9CA3AF]">{formatRelativeDate(notif.date || notif.date_creation)}</p>
+                        </div>
+                        {!notif.est_lue && (
+                          <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[#2F6E9E]" />
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
           </>
         )}
       </div>

@@ -20,6 +20,7 @@ function PharmacienLayout({
           pharmacy={pharmacy}
           pharmacyHeader={pharmacyHeader}
           showSubtitle={showHeaderSubtitle}
+          notificationsPath="/pharmacien/notifications"
         />
 
         <section className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 lg:px-7">

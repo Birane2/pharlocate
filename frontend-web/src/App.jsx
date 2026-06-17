@@ -48,6 +48,8 @@ import AdminCommissionInvoices from "./pages/admin/AdminCommissionInvoices";
 import AdminCommissionInvoiceDetail from "./pages/admin/AdminCommissionInvoiceDetail";
 import CommissionInvoices from "./pages/pharmacien/CommissionInvoices";
 import CommissionInvoiceDetail from "./pages/pharmacien/CommissionInvoiceDetail";
+import PharmacienNotifications from "./pages/pharmacien/PharmacienNotifications";
+import AdminNotifications from "./pages/admin/AdminNotifications";
 
 function App() {
   return (
@@ -479,6 +481,26 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
             <AdminCommissionInvoices />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Notifications — pharmacien */}
+      <Route
+        path="/pharmacien/notifications"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacienNotifications />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Notifications — admin */}
+      <Route
+        path="/admin/notifications"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminNotifications />
           </ProtectedRoute>
         }
       />

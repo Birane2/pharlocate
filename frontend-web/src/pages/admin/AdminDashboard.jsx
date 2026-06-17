@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -30,6 +30,7 @@ import { Bar, Doughnut } from "react-chartjs-2";
 import AdminStatsCard from "../../components/admin/AdminStatsCard";
 import AdminLayout from "../../layouts/AdminLayout";
 import { getAdminDashboardStats } from "../../services/adminService";
+import { getNotifications, markAllNotificationsRead } from "../../services/notificationService";
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -193,11 +194,61 @@ function QuickAction({ label, to, icon, tone = "blue", onClick }) {
   );
 }
 
+const NOTIF_ICONS = {
+  reservation: faCalendarCheck,
+  payment: faBell,
+  delivery: faBell,
+  subscription: faBell,
+  commission: faBell,
+  system: faBell,
+};
+
+const NOTIF_COLORS = {
+  reservation: "text-[#2F6E9E] bg-[#2F6E9E]/10",
+  payment: "text-[#10B981] bg-[#10B981]/10",
+  delivery: "text-[#2FA6A3] bg-[#2FA6A3]/10",
+  subscription: "text-[#8B5CF6] bg-[#8B5CF6]/10",
+  commission: "text-[#F59E0B] bg-[#F59E0B]/10",
+  system: "text-[#6B7280] bg-[#6B7280]/10",
+};
+
+function formatRelativeDate(dateStr) {
+  if (!dateStr) return "";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "À l'instant";
+  if (mins < 60) return `Il y a ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Il y a ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return days < 7 ? `Il y a ${days} j` : new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "short" }).format(new Date(dateStr));
+}
+
 function AdminDashboard() {
   const [stats, setStats] = useState(emptyStats);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedDate, setSelectedDate] = useState(getTodayDate);
+  const [recentNotifs, setRecentNotifs] = useState([]);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+
+  const handleMarkAllNotifRead = useCallback(async () => {
+    try {
+      await markAllNotificationsRead();
+      setRecentNotifs((prev) => prev.map((n) => ({ ...n, est_lue: true })));
+      setUnreadNotifCount(0);
+    } catch { /* silent */ }
+  }, []);
+
+  // Load recent notifications once on mount
+  useEffect(() => {
+    getNotifications({ page: 1, page_size: 5 })
+      .then((data) => {
+        setRecentNotifs(data.results || []);
+        setUnreadNotifCount((data.results || []).filter((n) => !n.est_lue).length);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -620,6 +671,74 @@ function AdminDashboard() {
             />
           </div>
         </aside>
+        </section>
+
+        {/* Recent system notifications */}
+        <section className="overflow-hidden rounded-2xl border border-[#E2E8F2] bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-[#E2E8F2] px-4 py-4">
+            <div className="flex items-center gap-3">
+              <FontAwesomeIcon icon={faBell} className="h-4 w-4 text-[#2F6E9E]" />
+              <h2 className="text-base font-bold text-[#1C2B4A]">Notifications récentes</h2>
+              {unreadNotifCount > 0 && (
+                <span className="rounded-full bg-[#EF4444]/10 px-2 py-0.5 text-[10px] font-black text-[#EF4444]">
+                  {unreadNotifCount} non lues
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {unreadNotifCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleMarkAllNotifRead}
+                  className="rounded-full bg-[#2FA6A3]/8 px-3 py-1.5 text-xs font-bold text-[#2FA6A3] transition hover:bg-[#2FA6A3] hover:text-white"
+                >
+                  Tout lire
+                </button>
+              )}
+              <Link
+                to="/admin/notifications"
+                className="rounded-full bg-[#2F6E9E]/8 px-3 py-1.5 text-xs font-bold text-[#2F6E9E] transition hover:bg-[#2F6E9E] hover:text-white"
+              >
+                Voir tout
+              </Link>
+            </div>
+          </div>
+
+          {recentNotifs.length === 0 ? (
+            <p className="px-4 py-6 text-sm font-semibold text-[#6B7280]">
+              Aucune notification récente.
+            </p>
+          ) : (
+            <ul>
+              {recentNotifs.map((notif) => {
+                const iconKey = notif.notification_type || "system";
+                const icon = NOTIF_ICONS[iconKey] || faBell;
+                const colorClass = notif.type === "alerte"
+                  ? "text-[#EF4444] bg-[#EF4444]/10"
+                  : NOTIF_COLORS[iconKey] || NOTIF_COLORS.system;
+                return (
+                  <li
+                    key={notif.id}
+                    className={`flex items-start gap-3 border-b border-[#F1F5F9] px-4 py-3 last:border-0 ${!notif.est_lue ? "bg-[#EFF6FF]" : ""}`}
+                  >
+                    <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${colorClass}`}>
+                      <FontAwesomeIcon icon={icon} className="h-3.5 w-3.5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-[#1C2B4A]">{notif.titre || notif.title || "Notification"}</p>
+                      <p className="mt-0.5 truncate text-[11px] font-medium text-[#6B7280]">{notif.message}</p>
+                      <p className="mt-1 text-[10px] font-semibold text-[#9CA3AF]">
+                        {formatRelativeDate(notif.date || notif.date_creation)}
+                      </p>
+                    </div>
+                    {!notif.est_lue && (
+                      <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[#2F6E9E]" />
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
       </div>
     </AdminLayout>
