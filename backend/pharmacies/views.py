@@ -1,6 +1,8 @@
 import math
+from collections import defaultdict
+from decimal import Decimal
 
-from django.db.models import Avg, F, Q
+from django.db.models import Avg, F, Q, Sum
 from django.utils import timezone
 from rest_framework import generics, status, viewsets
 from rest_framework.exceptions import NotFound
@@ -11,9 +13,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from config.permissions import IsAuthenticatedWithTokenMessage, IsPharmacien
+from deliveries.models import Delivery
+from finance.models import CommissionInvoice
 from medicaments.models import Stock
+from payments.models import Payment
 from reservations.models import Reservation
 from reviews.models import Avis
+from subscriptions.models import PharmacySubscription
 from .models import Horaire, Pharmacy
 from .serializers import (
     HoraireSerializer,
@@ -64,6 +70,35 @@ def calculate_distance_in_meters(origin_lat, origin_lng, target_lat, target_lng)
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     return round(earth_radius_meters * c, 1)
+
+
+def group_queryset_by_month(queryset, date_attr, value_attr=None):
+    monthly_values = defaultdict(lambda: Decimal('0.00'))
+
+    for item in queryset:
+        if isinstance(item, dict):
+            date_value = item.get(date_attr)
+            value = item.get(value_attr) if value_attr else 1
+        else:
+            date_value = getattr(item, date_attr, None)
+            value = getattr(item, value_attr) if value_attr else 1
+
+        if not date_value:
+            continue
+
+        if timezone.is_aware(date_value):
+            date_value = timezone.localtime(date_value)
+
+        month_key = date_value.strftime('%Y-%m')
+        monthly_values[month_key] += value
+
+    return [
+        {
+            'month': month,
+            'total': total,
+        }
+        for month, total in sorted(monthly_values.items())[-12:]
+    ]
 
 
 class PharmacyListCreateView(generics.ListCreateAPIView):
@@ -408,15 +443,71 @@ class PharmacienDashboardStatsView(APIView):
         )
         horaires = Horaire.objects.filter(pharmacie=pharmacy)
         avis = Avis.objects.filter(pharmacie=pharmacy)
+        payments = Payment.objects.filter(pharmacy=pharmacy)
+        deliveries = Delivery.objects.filter(pharmacy=pharmacy)
+        current_subscription = (
+            PharmacySubscription.objects.select_related('plan')
+            .filter(pharmacy=pharmacy, is_current=True)
+            .order_by('-date_creation')
+            .first()
+        )
+        unpaid_commission_invoices = CommissionInvoice.objects.filter(
+            pharmacy=pharmacy,
+            status__in=[
+                CommissionInvoice.STATUS_PENDING,
+                CommissionInvoice.STATUS_OVERDUE,
+            ],
+        )
 
         stocks_faibles = stocks.filter(quantite__lte=F('seuil_alerte'))
         stocks_rupture = stocks.filter(quantite=0)
         reservations_recentes = reservations.order_by('-date_reservation')[:5]
+        current_month = timezone.localdate().replace(day=1)
+        monthly_revenue = payments.filter(
+            statut=Payment.STATUS_VALIDATED,
+            date_validation__date__gte=current_month,
+        ).aggregate(total=Sum('montant_total'))['total'] or Decimal('0.00')
+        total_revenue = payments.filter(statut=Payment.STATUS_VALIDATED).aggregate(
+            total=Sum('montant_total')
+        )['total'] or Decimal('0.00')
+        commission_due = unpaid_commission_invoices.aggregate(
+            total=Sum('commission_amount')
+        )['total'] or Decimal('0.00')
+
+        monthly_revenue_points = [
+            {'month': item['month'], 'revenue': item['total']}
+            for item in group_queryset_by_month(
+                payments.filter(statut=Payment.STATUS_VALIDATED).values(
+                    'date_validation',
+                    'montant_total',
+                ),
+                'date_validation',
+                'montant_total',
+            )
+        ]
+        orders_evolution = [
+            {'month': item['month'], 'count': int(item['total'])}
+            for item in group_queryset_by_month(
+                reservations.values('date_reservation'),
+                'date_reservation',
+            )
+        ]
 
         return Response({
             'pharmacie': {
                 'id': pharmacy.id,
                 'nom': pharmacy.nom,
+                'name': pharmacy.nom,
+                'adresse': pharmacy.adresse,
+                'address': pharmacy.adresse,
+                'telephone': pharmacy.telephone,
+                'est_valide': pharmacy.est_valide,
+            },
+            'pharmacy': {
+                'id': pharmacy.id,
+                'nom': pharmacy.nom,
+                'name': pharmacy.nom,
+                'address': pharmacy.adresse,
                 'adresse': pharmacy.adresse,
                 'telephone': pharmacy.telephone,
                 'est_valide': pharmacy.est_valide,
@@ -449,8 +540,11 @@ class PharmacienDashboardStatsView(APIView):
                 'total': reservations.count(),
                 'en_attente': reservations.filter(statut='en_attente').count(),
                 'confirmees': reservations.filter(statut='confirmee').count(),
+                'en_preparation': reservations.filter(statut='en_preparation').count(),
+                'pretes': reservations.filter(statut='prete').count(),
                 'annulees': reservations.filter(statut='annulee').count(),
                 'recuperees': reservations.filter(statut='livree').count(),
+                'refusees': reservations.filter(statut='refusee').count(),
                 'recentes': [
                     {
                         'id': reservation.id,
@@ -476,5 +570,74 @@ class PharmacienDashboardStatsView(APIView):
             'avis': {
                 'note_moyenne': round(avis.aggregate(avg=Avg('note'))['avg'] or 0, 1),
                 'total': avis.count(),
+            },
+            'payments': {
+                'pending': payments.filter(statut=Payment.STATUS_PENDING).count(),
+                'validated': payments.filter(statut=Payment.STATUS_VALIDATED).count(),
+                'rejected': payments.filter(statut=Payment.STATUS_REJECTED).count(),
+                'refunded': payments.filter(statut=Payment.STATUS_REFUNDED).count(),
+            },
+            'deliveries': {
+                'active': deliveries.filter(
+                    statut__in=[Delivery.STATUS_PENDING, Delivery.STATUS_IN_PROGRESS]
+                ).count(),
+                'pending': deliveries.filter(statut=Delivery.STATUS_PENDING).count(),
+                'in_progress': deliveries.filter(statut=Delivery.STATUS_IN_PROGRESS).count(),
+                'delivered': deliveries.filter(statut=Delivery.STATUS_DELIVERED).count(),
+            },
+            'subscription': {
+                'plan': current_subscription.plan.nom if current_subscription else 'Gratuit',
+                'plan_code': current_subscription.plan.code if current_subscription else 'free',
+                'status': current_subscription.statut if current_subscription else 'inactive',
+                'end_date': current_subscription.date_fin if current_subscription else None,
+                'commission_rate': (
+                    current_subscription.plan.commission_rate
+                    if current_subscription
+                    else Decimal('0.0500')
+                ),
+            },
+            'finance': {
+                'monthly_revenue': monthly_revenue,
+                'total_revenue': total_revenue,
+                'commission_due': commission_due,
+                'pending_commission_invoices': unpaid_commission_invoices.count(),
+            },
+            'stats': {
+                'total_reservations': reservations.count(),
+                'pending_reservations': reservations.filter(statut='en_attente').count(),
+                'confirmed_orders': reservations.filter(statut='confirmee').count(),
+                'pending_payments': payments.filter(statut=Payment.STATUS_PENDING).count(),
+                'validated_payments': payments.filter(statut=Payment.STATUS_VALIDATED).count(),
+                'monthly_revenue': monthly_revenue,
+                'commission_due': commission_due,
+                'low_stock': stocks_faibles.count(),
+                'out_of_stock': stocks_rupture.count(),
+                'active_deliveries': deliveries.filter(
+                    statut__in=[Delivery.STATUS_PENDING, Delivery.STATUS_IN_PROGRESS]
+                ).count(),
+            },
+            'charts': {
+                'reservations_by_status': {
+                    'en_attente': reservations.filter(statut='en_attente').count(),
+                    'confirmee': reservations.filter(statut='confirmee').count(),
+                    'en_preparation': reservations.filter(statut='en_preparation').count(),
+                    'prete': reservations.filter(statut='prete').count(),
+                    'livree': reservations.filter(statut='livree').count(),
+                    'annulee': reservations.filter(statut='annulee').count(),
+                    'refusee': reservations.filter(statut='refusee').count(),
+                },
+                'monthly_revenue': monthly_revenue_points,
+                'payments_by_status': {
+                    'pending': payments.filter(statut=Payment.STATUS_PENDING).count(),
+                    'validated': payments.filter(statut=Payment.STATUS_VALIDATED).count(),
+                    'rejected': payments.filter(statut=Payment.STATUS_REJECTED).count(),
+                    'refunded': payments.filter(statut=Payment.STATUS_REFUNDED).count(),
+                },
+                'orders_evolution': orders_evolution,
+                'stock_health': {
+                    'available': stocks.filter(quantite__gt=0).count(),
+                    'low': stocks_faibles.count(),
+                    'out': stocks_rupture.count(),
+                },
             },
         })

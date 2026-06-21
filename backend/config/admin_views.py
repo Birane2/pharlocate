@@ -1,6 +1,8 @@
+from collections import defaultdict
+from decimal import Decimal
 from datetime import datetime
 
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.pagination import PageNumberPagination
@@ -15,8 +17,11 @@ from accounts.admin_serializers import (
 )
 from accounts.pagination import UserPagination
 from config.permissions import IsAdminRole, IsAuthenticatedWithTokenMessage
+from deliveries.models import Delivery
+from finance.models import CommissionInvoice
 from medicaments.models import Medicament, Stock
 from notifications_app.models import Notification
+from payments.models import Payment
 from pharmacies.admin_serializers import (
     AdminPharmacyDetailSerializer,
     AdminPharmacyListSerializer,
@@ -27,6 +32,75 @@ from pharmacies.admin_serializers import (
 )
 from pharmacies.models import Pharmacy
 from reservations.models import Reservation
+from subscriptions.models import PharmacySubscription, SubscriptionPayment, SubscriptionRefund
+
+
+def parse_dashboard_date(value, field_name):
+    if not value:
+        return None, None
+
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date(), None
+    except ValueError:
+        return None, {
+            'error': f'Format de {field_name} invalide. Utilisez YYYY-MM-DD.',
+        }
+
+
+def filter_by_period(queryset, field_name, start_date=None, end_date=None):
+    filters = {}
+
+    if start_date:
+        filters[f'{field_name}__date__gte'] = start_date
+
+    if end_date:
+        filters[f'{field_name}__date__lte'] = end_date
+
+    if not filters:
+        return queryset
+
+    return queryset.filter(**filters)
+
+
+def build_period_q(field_name, start_date=None, end_date=None):
+    query = Q()
+
+    if start_date:
+        query &= Q(**{f'{field_name}__date__gte': start_date})
+
+    if end_date:
+        query &= Q(**{f'{field_name}__date__lte': end_date})
+
+    return query
+
+
+def group_queryset_by_month(queryset, date_attr, value_attr=None):
+    monthly_values = defaultdict(lambda: Decimal('0.00'))
+
+    for item in queryset:
+        if isinstance(item, dict):
+            date_value = item.get(date_attr)
+            value = item.get(value_attr) if value_attr else 1
+        else:
+            date_value = getattr(item, date_attr, None)
+            value = getattr(item, value_attr) if value_attr else 1
+
+        if not date_value:
+            continue
+
+        if timezone.is_aware(date_value):
+            date_value = timezone.localtime(date_value)
+
+        month_key = date_value.strftime('%Y-%m')
+        monthly_values[month_key] += value
+
+    return [
+        {
+            'month': month,
+            'total': total,
+        }
+        for month, total in sorted(monthly_values.items())[-12:]
+    ]
 
 
 class AdminDashboardStatsView(APIView):
@@ -36,34 +110,89 @@ class AdminDashboardStatsView(APIView):
         return queryset.filter(statut__in=['refusee', 'annulee']).count()
 
     def get(self, request):
-        date_param = request.query_params.get('date')
-        selected_date = None
+        legacy_date_param = request.query_params.get('date')
+        start_date_param = request.query_params.get('start_date') or legacy_date_param
+        end_date_param = request.query_params.get('end_date') or legacy_date_param
 
-        if date_param:
-            try:
-                selected_date = datetime.strptime(date_param, '%Y-%m-%d').date()
-            except ValueError:
-                return Response(
-                    {'error': 'Format de date invalide. Utilisez YYYY-MM-DD.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        start_date, start_error = parse_dashboard_date(start_date_param, 'date de debut')
+        if start_error:
+            return Response(start_error, status=status.HTTP_400_BAD_REQUEST)
+
+        end_date, end_error = parse_dashboard_date(end_date_param, 'date de fin')
+        if end_error:
+            return Response(end_error, status=status.HTTP_400_BAD_REQUEST)
+
+        if start_date and end_date and start_date > end_date:
+            return Response(
+                {'error': 'La date de debut ne peut pas etre superieure a la date de fin.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        has_period_filter = bool(start_date or end_date)
 
         pharmacies_all = Pharmacy.objects.select_related('user').all()
         users_all = User.objects.all()
         reservations_all = Reservation.objects.select_related('user', 'pharmacie').all()
         medicaments_all = Medicament.objects.all()
         stocks_all = Stock.objects.all()
+        payments_all = Payment.objects.select_related('pharmacy', 'user').all()
+        deliveries_all = Delivery.objects.select_related('pharmacy', 'user').all()
+        subscriptions_all = PharmacySubscription.objects.select_related('plan', 'pharmacy').all()
+        subscription_payments_all = SubscriptionPayment.objects.all()
+        subscription_refunds_all = SubscriptionRefund.objects.all()
+        commission_invoices_all = CommissionInvoice.objects.select_related('pharmacy').all()
 
-        if selected_date:
-            pharmacies = pharmacies_all.filter(date_creation__date=selected_date)
-            validated_pharmacies = pharmacies_all.filter(date_validation__date=selected_date)
-            suspended_pharmacies = pharmacies_all.filter(date_suspension__date=selected_date)
-            users = users_all.filter(date_creation__date=selected_date)
-            reservations = reservations_all.filter(date_reservation__date=selected_date)
-            medicaments = medicaments_all.filter(date_creation__date=selected_date)
+        if has_period_filter:
+            pharmacies = filter_by_period(pharmacies_all, 'date_creation', start_date, end_date)
+            validated_pharmacies = filter_by_period(
+                pharmacies_all,
+                'date_validation',
+                start_date,
+                end_date,
+            )
+            suspended_pharmacies = filter_by_period(
+                pharmacies_all,
+                'date_suspension',
+                start_date,
+                end_date,
+            )
+            users = filter_by_period(users_all, 'date_creation', start_date, end_date)
+            reservations = filter_by_period(
+                reservations_all,
+                'date_reservation',
+                start_date,
+                end_date,
+            )
+            medicaments = filter_by_period(medicaments_all, 'date_creation', start_date, end_date)
             stocks = stocks_all.filter(
-                Q(date_creation__date=selected_date)
-                | Q(date_modification__date=selected_date)
+                build_period_q('date_creation', start_date, end_date)
+                | build_period_q('date_modification', start_date, end_date)
+            )
+            payments = filter_by_period(payments_all, 'date_creation', start_date, end_date)
+            deliveries = filter_by_period(deliveries_all, 'date_creation', start_date, end_date)
+            subscriptions = filter_by_period(
+                subscriptions_all,
+                'date_creation',
+                start_date,
+                end_date,
+            )
+            subscription_payments = filter_by_period(
+                subscription_payments_all,
+                'created_at',
+                start_date,
+                end_date,
+            )
+            subscription_refunds = filter_by_period(
+                subscription_refunds_all,
+                'created_at',
+                start_date,
+                end_date,
+            )
+            commission_invoices = filter_by_period(
+                commission_invoices_all,
+                'created_at',
+                start_date,
+                end_date,
             )
         else:
             pharmacies = pharmacies_all
@@ -73,6 +202,12 @@ class AdminDashboardStatsView(APIView):
             reservations = reservations_all
             medicaments = medicaments_all
             stocks = stocks_all
+            payments = payments_all
+            deliveries = deliveries_all
+            subscriptions = subscriptions_all
+            subscription_payments = subscription_payments_all
+            subscription_refunds = subscription_refunds_all
+            commission_invoices = commission_invoices_all
 
         users_by_role = {
             item['role']: item['total']
@@ -120,8 +255,75 @@ class AdminDashboardStatsView(APIView):
             key=lambda activity: activity['date'],
             reverse=True,
         )[:6]
+        validated_payments = payments.filter(statut=Payment.STATUS_VALIDATED)
+        pending_payments = payments.filter(statut=Payment.STATUS_PENDING)
+        subscription_revenue = subscription_payments.filter(
+            status=SubscriptionPayment.STATUS_VALIDATED
+        ).aggregate(total=Sum('amount'))['total'] or 0
+        commission_revenue = commission_invoices.filter(
+            status=CommissionInvoice.STATUS_PAID
+        ).aggregate(total=Sum('commission_amount'))['total'] or 0
+        unpaid_commission_invoices = commission_invoices.filter(
+            status__in=[
+                CommissionInvoice.STATUS_PENDING,
+                CommissionInvoice.STATUS_OVERDUE,
+            ],
+        )
+        revenue_by_month = [
+            {'month': item['month'], 'amount': item['total']}
+            for item in group_queryset_by_month(
+                subscription_payments.filter(status=SubscriptionPayment.STATUS_VALIDATED).values(
+                    'validated_at',
+                    'amount',
+                ),
+                'validated_at',
+                'amount',
+            )
+        ]
+        reservations_by_month = [
+            {'month': item['month'], 'count': int(item['total'])}
+            for item in group_queryset_by_month(
+                reservations.values('date_reservation'),
+                'date_reservation',
+            )
+        ]
+        top_pharmacies = [
+            {
+                'id': row['pharmacy'],
+                'name': row['pharmacy__nom'] or 'Pharmacie non renseignee',
+                'pharmacy_name': row['pharmacy__nom'] or 'Pharmacie non renseignee',
+                'revenue': row['revenue'] or 0,
+                'orders': row['orders'] or 0,
+            }
+            for row in (
+                validated_payments.filter(pharmacy__isnull=False)
+                .values('pharmacy', 'pharmacy__nom')
+                .annotate(
+                    revenue=Sum('montant_total'),
+                    orders=Count('reservation_id', distinct=True),
+                )
+                .order_by('-revenue')[:5]
+            )
+        ]
+
+        period_label = 'Toutes les donnees'
+        if start_date and end_date:
+            period_label = (
+                "Aujourd'hui"
+                if start_date == end_date == timezone.localdate()
+                else f'{start_date.isoformat()} -> {end_date.isoformat()}'
+            )
+        elif start_date:
+            period_label = f'Depuis le {start_date.isoformat()}'
+        elif end_date:
+            period_label = f"Jusqu'au {end_date.isoformat()}"
 
         return Response({
+            'period': {
+                'start_date': start_date.isoformat() if start_date else None,
+                'end_date': end_date.isoformat() if end_date else None,
+                'label': period_label,
+            },
             'pharmacies': {
                 'total': pharmacies.count(),
                 'validees': validated_pharmacies.count(),
@@ -153,14 +355,44 @@ class AdminDashboardStatsView(APIView):
                 'faibles': stocks.filter(quantite__gt=0, quantite__lte=5).count(),
                 'rupture': stocks.filter(quantite=0).count(),
             },
-            'selected_date': selected_date.isoformat() if selected_date else None,
+            'selected_date': (
+                start_date.isoformat()
+                if start_date and end_date and start_date == end_date
+                else None
+            ),
             'stats': {
                 'total_pharmacies': pharmacies.count(),
                 'validated_pharmacies': validated_pharmacies.count(),
+                'pending_validation_pharmacies': pharmacies.filter(
+                    statut_validation='en_attente'
+                ).count(),
                 'pending_pharmacies': pharmacies.filter(statut_validation='en_attente').count(),
                 'total_users': users.count(),
                 'total_pharmacists': users_by_role.get('pharmacien', 0),
+                'total_customers': users_by_role.get('utilisateur', 0),
                 'total_reservations': reservations.count(),
+                'pending_payments': pending_payments.count(),
+                'validated_payments': validated_payments.count(),
+                'subscription_revenue': subscription_revenue,
+                'commission_revenue': commission_revenue,
+                'commissions_generated': commission_invoices.aggregate(
+                    total=Sum('commission_amount')
+                )['total'] or 0,
+                'unpaid_commission_invoices': unpaid_commission_invoices.count(),
+                'pending_refunds': subscription_refunds.filter(
+                    status=SubscriptionRefund.STATUS_REQUESTED
+                ).count(),
+                'active_deliveries': deliveries.filter(
+                    statut__in=[Delivery.STATUS_PENDING, Delivery.STATUS_IN_PROGRESS]
+                ).count(),
+                'standard_subscriptions': subscriptions.filter(
+                    plan__code__icontains='standard',
+                    is_current=True,
+                ).count(),
+                'premium_subscriptions': subscriptions.filter(
+                    plan__code__icontains='premium',
+                    is_current=True,
+                ).count(),
                 'total_medicaments': medicaments.count(),
                 'total_stocks': stocks.count(),
             },
@@ -176,12 +408,34 @@ class AdminDashboardStatsView(APIView):
                     'livree': reservations.filter(statut='livree').count(),
                     'refusee': self._get_reservation_refused_count(reservations),
                 },
+                'reservations_by_month': reservations_by_month,
+                'revenue_by_month': revenue_by_month,
+                'subscriptions_by_plan': {
+                    'free': subscriptions.filter(plan__code__in=['free', 'gratuit']).count(),
+                    'standard': subscriptions.filter(plan__code__icontains='standard').count(),
+                    'premium': subscriptions.filter(plan__code__icontains='premium').count(),
+                },
+                'payments_by_status': {
+                    'pending': pending_payments.count(),
+                    'validated': validated_payments.count(),
+                    'rejected': payments.filter(statut=Payment.STATUS_REJECTED).count(),
+                    'refunded': payments.filter(statut=Payment.STATUS_REFUNDED).count(),
+                },
             },
+            'top_pharmacies': top_pharmacies,
             'alerts': {
                 'pending_pharmacies': pharmacies.filter(statut_validation='en_attente').count(),
                 'low_stocks': stocks.filter(quantite__gt=0, quantite__lte=5).count(),
                 'out_of_stocks': stocks.filter(quantite=0).count(),
                 'pending_reservations': reservations.filter(statut='en_attente').count(),
+                'pending_payments': pending_payments.count(),
+                'unpaid_commission_invoices': unpaid_commission_invoices.count(),
+                'pending_refunds': subscription_refunds.filter(
+                    status=SubscriptionRefund.STATUS_REQUESTED
+                ).count(),
+                'active_deliveries': deliveries.filter(
+                    statut__in=[Delivery.STATUS_PENDING, Delivery.STATUS_IN_PROGRESS]
+                ).count(),
             },
             'latest_activities': latest_activities,
             'recent_activities': latest_activities,

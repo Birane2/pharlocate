@@ -9,9 +9,15 @@ function AdminLayout({
   children,
   showDateFilter = false,
   selectedDate = "",
+  startDate = "",
+  endDate = "",
   onDateChange,
+  onStartDateChange,
+  onEndDateChange,
   onTodayClick,
+  onAllDataClick,
   onResetClick,
+  actionLoading = false,
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -38,9 +44,15 @@ function AdminLayout({
           subtitle={subtitle}
           showDateFilter={showDateFilter}
           selectedDate={selectedDate}
+          startDate={startDate}
+          endDate={endDate}
           onDateChange={onDateChange}
+          onStartDateChange={onStartDateChange}
+          onEndDateChange={onEndDateChange}
           onTodayClick={onTodayClick}
+          onAllDataClick={onAllDataClick}
           onResetClick={onResetClick}
+          actionLoading={actionLoading}
           notificationsPath="/admin/notifications"
         />
 

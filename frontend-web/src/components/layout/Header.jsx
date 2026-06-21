@@ -5,6 +5,7 @@ import {
   faChevronDown,
   faCircleCheck,
   faClock,
+  faDatabase,
   faHospital,
   faLocationDot,
   faPhone,
@@ -27,6 +28,42 @@ function formatDisplayDate(value) {
   }).format(new Date(`${dateValue}T00:00:00`));
 }
 
+function getPeriodLabel(startDate, endDate) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (!startDate && !endDate) {
+    return "Toutes les données";
+  }
+
+  if (startDate && endDate && startDate === endDate) {
+    return startDate === today ? "Aujourd'hui" : formatDisplayDate(startDate);
+  }
+
+  if (startDate && endDate) {
+    return `${formatDisplayDate(startDate)} -> ${formatDisplayDate(endDate)}`;
+  }
+
+  if (startDate) {
+    return `Depuis ${formatDisplayDate(startDate)}`;
+  }
+
+  return `Jusqu'au ${formatDisplayDate(endDate)}`;
+}
+
+function getProfilePath(role) {
+  const normalizedRole = String(role || "").toLowerCase();
+
+  if (normalizedRole === "admin" || normalizedRole === "administrateur") {
+    return "/admin/profil";
+  }
+
+  if (normalizedRole === "pharmacien") {
+    return "/pharmacien/profil";
+  }
+
+  return "/profil";
+}
+
 function Header({
   title = "Administration",
   subtitle,
@@ -37,9 +74,15 @@ function Header({
   pharmacyHeader = false,
   showDateFilter = false,
   selectedDate = "",
+  startDate = "",
+  endDate = "",
   onDateChange,
+  onStartDateChange,
+  onEndDateChange,
   onTodayClick,
+  onAllDataClick,
   onResetClick,
+  actionLoading = false,
   notificationsPath,
 }) {
   const { user, logout } = useAuth();
@@ -47,12 +90,20 @@ function Header({
   const fullName = `${user?.first_name || ""} ${user?.last_name || ""}`.trim();
   const displayName =
     fullName || user?.phone_number || (user?.role === "pharmacien" ? "Pharmacien" : "Admin");
+  const menuSubtitle = user?.email || user?.role || "Compte";
   const avatarLabel = displayName.slice(0, 2).toUpperCase();
-  const pharmacyName = (pharmacy?.nom || "Votre pharmacie")
+  const pharmacyName = (
+    pharmacy?.nom ||
+    pharmacy?.name ||
+    pharmacy?.pharmacy_name ||
+    "Pharmacie non renseignée"
+  )
     .replace(/^(ph\.?\s*)+/i, "")
     .trim();
 
   const isAdminDashboardHeader = user?.role === "admin" && showDateFilter;
+  const effectiveStartDate = startDate || selectedDate || "";
+  const effectiveEndDate = endDate || selectedDate || "";
 
   return (
     <header className="sticky top-0 z-50 border-b border-[#E5E7EB] bg-white px-4 py-5 shadow-sm sm:px-6 lg:px-7">
@@ -126,16 +177,37 @@ function Header({
           )}
 
           {isAdminDashboardHeader && (
-            <div className="hidden items-center gap-2 md:flex">
-              <label className="relative cursor-pointer items-center gap-3 rounded-xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm font-bold text-[#1C2B4A] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:flex">
+            <div className="hidden flex-wrap items-center justify-end gap-2 md:flex">
+              <span className="inline-flex max-w-[220px] items-center gap-2 truncate rounded-xl border border-[#2F6E9E]/10 bg-[#2F6E9E]/5 px-3.5 py-3 text-xs font-black text-[#1C2B4A]">
                 <FontAwesomeIcon icon={faCalendarDays} className="text-[#2F6E9E]" />
-                <span>{selectedDate ? formatDisplayDate(selectedDate) : "Vue globale"}</span>
+                <span className="truncate">{getPeriodLabel(effectiveStartDate, effectiveEndDate)}</span>
+              </span>
+              <label className="relative cursor-pointer items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-xs font-bold text-[#1C2B4A] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:flex">
+                <span>Début</span>
                 <input
                   type="date"
-                  value={selectedDate}
-                  onChange={(event) => onDateChange?.(event.target.value)}
-                  className="absolute inset-0 cursor-pointer opacity-0"
-                  aria-label="Selectionner une date"
+                  value={effectiveStartDate}
+                  onChange={(event) =>
+                    onStartDateChange
+                      ? onStartDateChange(event.target.value)
+                      : onDateChange?.(event.target.value)
+                  }
+                  className="max-w-[128px] bg-transparent text-xs font-bold outline-none"
+                  aria-label="Sélectionner la date de début"
+                />
+              </label>
+              <label className="relative cursor-pointer items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-xs font-bold text-[#1C2B4A] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:flex">
+                <span>Fin</span>
+                <input
+                  type="date"
+                  value={effectiveEndDate}
+                  onChange={(event) =>
+                    onEndDateChange
+                      ? onEndDateChange(event.target.value)
+                      : onDateChange?.(event.target.value)
+                  }
+                  className="max-w-[128px] bg-transparent text-xs font-bold outline-none"
+                  aria-label="Sélectionner la date de fin"
                 />
               </label>
               <button
@@ -148,11 +220,23 @@ function Header({
               </button>
               <button
                 type="button"
-                onClick={onResetClick}
-                className="inline-flex items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-3.5 py-3 text-xs font-bold text-[#2FA6A3] shadow-sm transition hover:-translate-y-0.5 hover:border-[#2FA6A3]/40 hover:bg-[#2FA6A3]/8 hover:shadow-md"
+                onClick={onAllDataClick}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#2F6E9E]/15 bg-[#F8FAFC] px-3.5 py-3 text-xs font-bold text-[#2F6E9E] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#2F6E9E]/8 hover:shadow-md"
               >
-                <FontAwesomeIcon icon={faRotateRight} className="h-3.5 w-3.5" />
-                Reinitialiser
+                <FontAwesomeIcon icon={faDatabase} className="h-3.5 w-3.5" />
+                Toutes les données
+              </button>
+              <button
+                type="button"
+                onClick={onResetClick}
+                disabled={actionLoading}
+                className="inline-flex items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white px-3.5 py-3 text-xs font-bold text-[#2FA6A3] shadow-sm transition hover:-translate-y-0.5 hover:border-[#2FA6A3]/40 hover:bg-[#2FA6A3]/8 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                <FontAwesomeIcon
+                  icon={faRotateRight}
+                  className={`h-3.5 w-3.5 ${actionLoading ? "animate-spin" : ""}`}
+                />
+                Actualiser
               </button>
             </div>
           )}
@@ -173,7 +257,7 @@ function Header({
                 {displayName}
               </span>
               <span className="block text-[10px] font-medium text-[#6B7280]">
-                {displayName}
+                {menuSubtitle}
               </span>
             </span>
             <FontAwesomeIcon
@@ -193,7 +277,7 @@ function Header({
                 {displayName}
               </p>
               <Link
-                to="/pharmacien/profil"
+                to={getProfilePath(user?.role)}
                 className="mt-1 flex items-center gap-2 rounded-lg px-2 py-2 text-xs font-bold text-[#2F6E9E] transition hover:bg-[#2F6E9E]/5"
                 role="menuitem"
               >

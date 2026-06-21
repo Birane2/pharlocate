@@ -243,3 +243,78 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
             })
 
         return attrs
+
+
+class AdminProfileSerializer(serializers.ModelSerializer):
+    date_joined = serializers.DateTimeField(read_only=True)
+    date_creation = serializers.DateTimeField(read_only=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'first_name',
+            'last_name',
+            'email',
+            'phone_number',
+            'role',
+            'is_active',
+            'date_joined',
+            'date_creation',
+        ]
+        read_only_fields = fields
+
+
+class AdminProfileUpdateSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(required=True)
+    phone_number = serializers.CharField(required=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'first_name',
+            'last_name',
+            'email',
+            'phone_number',
+        ]
+
+    def validate_email(self, value):
+        email = value.strip().lower()
+        user = self.instance
+
+        if User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists():
+            raise serializers.ValidationError('Cette adresse e-mail est deja utilisee.')
+
+        return email
+
+    def validate_phone_number(self, value):
+        phone_number = validate_mauritanian_phone(value)
+        user = self.instance
+
+        if User.objects.filter(phone_number=phone_number).exclude(pk=user.pk).exists():
+            raise serializers.ValidationError('Ce numero de telephone est deja utilise.')
+
+        return phone_number
+
+
+class AdminPasswordChangeSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, min_length=8)
+    new_password_confirm = serializers.CharField(write_only=True)
+
+    def validate_old_password(self, value):
+        user = self.context['request'].user
+
+        if not user.check_password(value):
+            raise serializers.ValidationError('Ancien mot de passe incorrect.')
+
+        return value
+
+    def validate(self, attrs):
+        if attrs['new_password'] != attrs['new_password_confirm']:
+            raise serializers.ValidationError({
+                'new_password_confirm': 'Les mots de passe ne correspondent pas.'
+            })
+
+        validate_password(attrs['new_password'], self.context['request'].user)
+        return attrs

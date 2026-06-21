@@ -8,9 +8,9 @@ import {
   faClock,
   faCreditCard,
   faInfoCircle,
+  faMoneyBillWave,
   faPills,
   faShieldHalved,
-  faStar,
   faTruck,
   faTriangleExclamation,
 } from "@fortawesome/free-solid-svg-icons";
@@ -18,7 +18,6 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import ActivitySummary from "../../components/dashboard/ActivitySummary";
 import CompactCharts from "../../components/dashboard/CompactCharts";
 import CompactStatCard from "../../components/dashboard/CompactStatCard";
-import DashboardQuickActions from "../../components/dashboard/DashboardQuickActions";
 import PriorityAlerts from "../../components/dashboard/PriorityAlerts";
 import RecentReservations from "../../components/dashboard/RecentReservations";
 import DashboardLayout from "../../components/layout/DashboardLayout";
@@ -43,7 +42,38 @@ const emptyStats = {
     confirmees: 0,
     annulees: 0,
     recuperees: 0,
+    refusees: 0,
     recentes: [],
+  },
+  payments: {
+    pending: 0,
+    validated: 0,
+    rejected: 0,
+    refunded: 0,
+  },
+  deliveries: {
+    active: 0,
+    pending: 0,
+    in_progress: 0,
+    delivered: 0,
+  },
+  finance: {
+    monthly_revenue: 0,
+    total_revenue: 0,
+    commission_due: 0,
+    pending_commission_invoices: 0,
+  },
+  subscription: {
+    plan: "Gratuit",
+    status: "inactive",
+    end_date: null,
+    commission_rate: 0.05,
+  },
+  charts: {
+    reservations_by_status: {},
+    monthly_revenue: [],
+    payments_by_status: {},
+    stock_health: {},
   },
   horaires: {
     total: 0,
@@ -55,6 +85,21 @@ const emptyStats = {
     total: 0,
   },
 };
+
+function formatMoney(value) {
+  return `${Number(value || 0).toLocaleString("fr-FR", {
+    maximumFractionDigits: 0,
+  })} MRU`;
+}
+
+function formatDate(value) {
+  if (!value) return "Non definie";
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
 
 function getApiErrorMessage(error) {
   if (error.response?.status === 401) {
@@ -138,26 +183,6 @@ function PharmacienDashboard() {
   const [recentNotifs, setRecentNotifs] = useState([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
 
-  const loadStats = async () => {
-    setLoading(true);
-    setError("");
-
-    try {
-      const [dashboardData, paymentConfig] = await Promise.all([
-        getPharmacienDashboardStats(),
-        getPharmacienPaymentMethods().catch(() => null),
-      ]);
-
-      setStats(dashboardData);
-      setShowPaymentAlert(!hasConfiguredPaymentMethod(paymentConfig));
-    } catch (err) {
-      setStats(emptyStats);
-      setError(getApiErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleMarkAllNotifRead = async () => {
     try {
       await markAllNotificationsRead();
@@ -237,34 +262,64 @@ function PharmacienDashboard() {
   const statCards = useMemo(
     () => [
       {
-        label: "Medicaments disponibles",
-        value: stats.stocks.disponibles,
-        icon: faPills,
-        tone: "turquoise",
+        label: "Total reservations",
+        value: stats.stats?.total_reservations ?? stats.reservations.total,
+        icon: faCalendarCheck,
+        tone: "blue",
       },
       {
         label: "Reservations en attente",
-        value: stats.reservations.en_attente,
+        value: stats.stats?.pending_reservations ?? stats.reservations.en_attente,
         icon: faClock,
         tone: stats.reservations.en_attente > 0 ? "orange" : "green",
       },
       {
-        label: "Reservations confirmees",
-        value: stats.reservations.confirmees,
+        label: "Commandes confirmees",
+        value: stats.stats?.confirmed_orders ?? stats.reservations.confirmees,
         icon: faCheckCircle,
         tone: "blue",
       },
       {
+        label: "Paiements en attente",
+        value: stats.stats?.pending_payments ?? stats.payments.pending,
+        icon: faCreditCard,
+        tone: stats.payments.pending > 0 ? "orange" : "green",
+      },
+      {
+        label: "Paiements valides",
+        value: stats.stats?.validated_payments ?? stats.payments.validated,
+        icon: faCreditCard,
+        tone: "turquoise",
+      },
+      {
+        label: "CA du mois",
+        value: formatMoney(stats.stats?.monthly_revenue ?? stats.finance.monthly_revenue),
+        icon: faMoneyBillWave,
+        tone: "green",
+      },
+      {
+        label: "Commissions dues",
+        value: formatMoney(stats.stats?.commission_due ?? stats.finance.commission_due),
+        icon: faShieldHalved,
+        tone: (Number(stats.finance.commission_due) || 0) > 0 ? "orange" : "green",
+      },
+      {
         label: "Stocks faibles",
-        value: stats.stocks.faibles,
+        value: stats.stats?.low_stock ?? stats.stocks.faibles,
         icon: faTriangleExclamation,
         tone: stats.stocks.faibles > 0 ? "orange" : "green",
       },
       {
-        label: "Avis clients",
-        value: stats.avis.total,
-        icon: faStar,
-        tone: "blue",
+        label: "Ruptures",
+        value: stats.stats?.out_of_stock ?? stats.stocks.rupture,
+        icon: faPills,
+        tone: stats.stocks.rupture > 0 ? "red" : "green",
+      },
+      {
+        label: "Livraisons en cours",
+        value: stats.stats?.active_deliveries ?? stats.deliveries.active,
+        icon: faTruck,
+        tone: "turquoise",
       },
       {
         label: "Disponibilite pharmacie",
@@ -284,11 +339,6 @@ function PharmacienDashboard() {
       pharmacyHeader
     >
       <div className="space-y-4">
-        <DashboardQuickActions
-          loading={loading}
-          onRefresh={loadStats}
-        />
-
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
             {error}
@@ -335,6 +385,33 @@ function PharmacienDashboard() {
               ))}
             </section>
 
+            <section className="dashboard-reveal grid gap-3 rounded-2xl border border-[#E2E8F2] bg-white p-4 shadow-sm md:grid-cols-3">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#2FA6A3]">
+                  Abonnement actuel
+                </p>
+                <p className="mt-1 text-lg font-black text-[#1C2B4A]">
+                  {stats.subscription?.plan || "Gratuit"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6B7280]">
+                  Statut
+                </p>
+                <p className="mt-1 inline-flex rounded-full bg-[#2F6E9E]/10 px-3 py-1 text-xs font-black text-[#2F6E9E]">
+                  {stats.subscription?.status || "inactive"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#6B7280]">
+                  Expiration
+                </p>
+                <p className="mt-1 text-sm font-bold text-[#1C2B4A]">
+                  {formatDate(stats.subscription?.end_date)}
+                </p>
+              </div>
+            </section>
+
             <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
               <RecentReservations reservations={stats.reservations.recentes || []} />
               <ActivitySummary
@@ -347,6 +424,8 @@ function PharmacienDashboard() {
             <CompactCharts
               stocks={stats.stocks}
               reservations={stats.reservations}
+              payments={stats.payments}
+              charts={stats.charts}
             />
 
             {/* Recent notifications panel */}

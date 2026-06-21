@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Navigate, Routes, Route } from "react-router-dom";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import VerifyOtp from "./pages/auth/VerifyOtp";
@@ -41,6 +41,7 @@ import AdminFinance from "./pages/admin/AdminFinance";
 import AdminFinanceList from "./pages/admin/AdminFinanceList";
 import AdminPayments from "./pages/admin/AdminPayments";
 import AdminPlatformPaymentMethods from "./pages/admin/AdminPlatformPaymentMethods";
+import AdminProfile from "./pages/admin/AdminProfile";
 import AdminSubscriptionPayments from "./pages/admin/AdminSubscriptionPayments";
 import AdminSubscriptionRefunds from "./pages/admin/AdminSubscriptionRefunds";
 import AdminTransactions from "./pages/admin/AdminTransactions";
@@ -190,6 +191,24 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
             <AdminPharmacies />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/profil"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminProfile />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/profile"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminProfile />
           </ProtectedRoute>
         }
       />
@@ -435,7 +454,7 @@ function App() {
         path="/admin/invoices"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
-            <AdminFinanceList type="invoices" title="Gestion factures" />
+            <Navigate to="/admin/finance" replace />
           </ProtectedRoute>
         }
       />
@@ -453,7 +472,7 @@ function App() {
         path="/admin/subscriptions"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
-            <AdminFinanceList type="subscriptions" title="Gestion abonnements" />
+            <Navigate to="/admin/finance" replace />
           </ProtectedRoute>
         }
       />

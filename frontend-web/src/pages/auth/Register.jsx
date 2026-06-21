@@ -197,7 +197,7 @@ function Register() {
               icon={faEnvelope}
               name="email"
               type="email"
-              placeholder="oumar@email.com"
+              placeholder="oumar@gmail.com"
               value={form.email}
               onChange={handleChange}
               required

@@ -202,11 +202,6 @@ export async function rejectAdminPayment(id, reason) {
   return response.data;
 }
 
-export async function getAdminInvoices(params = {}) {
-  const response = await API.get("/api/admin/invoices/", { params });
-  return normalizeList(response.data);
-}
-
 export async function getAdminRefunds(params = {}) {
   const response = await API.get("/api/admin/refunds/", { params });
   return normalizeList(response.data);
@@ -227,11 +222,6 @@ export async function rejectRefund(id, commentaire_admin) {
 export async function executeRefund(id) {
   const response = await API.post(`/api/refunds/${id}/execute/`);
   return response.data;
-}
-
-export async function getAdminSubscriptions(params = {}) {
-  const response = await API.get("/api/admin/finance/subscriptions/", { params });
-  return normalizeList(response.data);
 }
 
 export async function getAdminFinancePayments(params = {}) {

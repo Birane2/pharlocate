@@ -8,9 +8,13 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from config.permissions import IsAuthenticatedWithTokenMessage
+from config.permissions import IsAdminRole
 
 from .models import User
 from .serializers import (
+    AdminPasswordChangeSerializer,
+    AdminProfileSerializer,
+    AdminProfileUpdateSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     PasswordResetVerifySerializer,
@@ -63,6 +67,50 @@ class LoginView(APIView):
             )
 
         return Response(build_auth_payload(user))
+
+
+class AdminProfileView(APIView):
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+
+    def get(self, request):
+        return Response(AdminProfileSerializer(request.user).data)
+
+    def put(self, request):
+        serializer = AdminProfileUpdateSerializer(
+            request.user,
+            data=request.data,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(AdminProfileSerializer(request.user).data)
+
+    def patch(self, request):
+        serializer = AdminProfileUpdateSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(AdminProfileSerializer(request.user).data)
+
+
+class AdminPasswordChangeView(APIView):
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+
+    def post(self, request):
+        serializer = AdminPasswordChangeSerializer(
+            data=request.data,
+            context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        request.user.set_password(serializer.validated_data['new_password'])
+        request.user.save(update_fields=['password'])
+
+        return Response({
+            'message': 'Mot de passe modifie avec succes.'
+        })
 
 
 @api_view(['GET'])

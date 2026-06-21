@@ -24,7 +24,7 @@ function getApiError(err) {
     data?.non_field_errors?.[0] ||
     err.message;
 
-  return message || "Téléphone, e-mail ou mot de passe incorrect.";
+  return message || "Téléphone,  ou mot de passe incorrect.";
 }
 
 function Login() {
@@ -97,7 +97,7 @@ function Login() {
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
             <label className="mb-1.5 block text-xs font-bold text-[#1C2B4A]">
-              Téléphone ou e-mail
+              Téléphone 
             </label>
             <div className="flex h-12 items-center gap-3 rounded-xl border border-[#E2E8F2] bg-white px-3.5 shadow-sm transition focus-within:border-[#2F6E9E] focus-within:ring-4 focus-within:ring-[#2F6E9E]/10">
               <FontAwesomeIcon
@@ -107,7 +107,7 @@ function Login() {
               <input
                 name="phone_number"
                 type="text"
-                placeholder="Ex : +222XXXXXXXX ou email@exemple.com"
+                placeholder="Ex : +222XXXXXXXX "
                 value={form.phone_number}
                 onChange={handleChange}
                 required

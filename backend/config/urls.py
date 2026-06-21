@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from accounts.views import AdminPasswordChangeView, AdminProfileView
 from pharmacies.views import PharmacienDashboardStatsView
 from subscriptions.views import (
     AdminPlatformPaymentMethodView,
@@ -18,6 +19,11 @@ from subscriptions.views import (
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('accounts.urls')),
+    path('api/admin/profile/', AdminProfileView.as_view()),
+    path(
+        'api/admin/profile/change-password/',
+        AdminPasswordChangeView.as_view(),
+    ),
     path('api/admin/payment-methods/', AdminPlatformPaymentMethodView.as_view()),
     path('api/admin/subscription-payments/', AdminSubscriptionPaymentListView.as_view()),
     path(
@@ -45,6 +51,7 @@ urlpatterns = [
     path('api/admin/', include('config.admin_urls')),
     path('api/platform/payment-methods/', PlatformPaymentMethodPublicView.as_view()),
     path('api/pharmacies/', include('pharmacies.urls')),
+    path('api/pharmacien/dashboard/', PharmacienDashboardStatsView.as_view()),
     path('api/pharmacien/dashboard/stats/', PharmacienDashboardStatsView.as_view()),
     path('api/pharmacien/pharmacie/', include('pharmacies.pharmacien_urls')),
     path('api/horaires/', include('pharmacies.horaire_urls')),

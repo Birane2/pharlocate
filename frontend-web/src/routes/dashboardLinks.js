@@ -12,6 +12,7 @@ import {
   faRotateLeft,
   faStar,
   faTruckFast,
+  faUserShield,
   faUsers,
 } from "@fortawesome/free-solid-svg-icons";
 
@@ -122,6 +123,12 @@ export const adminLinks = [
     icon: faClinicMedical,
   },
   {
+    label: "Profil",
+    shortLabel: "Profil",
+    path: "/admin/profil",
+    icon: faUserShield,
+  },
+  {
     label: "Finance",
     shortLabel: "Finance",
     path: "/admin/finance",
@@ -158,22 +165,10 @@ export const adminLinks = [
     icon: faRotateLeft,
   },
   {
-    label: "Factures",
-    shortLabel: "Inv.",
-    path: "/admin/invoices",
-    icon: faFileInvoice,
-  },
-  {
     label: "Remboursements",
     shortLabel: "Refund",
     path: "/admin/refunds",
     icon: faRotateLeft,
-  },
-  {
-    label: "Abonnements",
-    shortLabel: "Sub.",
-    path: "/admin/subscriptions",
-    icon: faCalendarCheck,
   },
   {
     label: "Factures commissions",

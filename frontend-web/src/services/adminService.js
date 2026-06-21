@@ -1,6 +1,7 @@
 import API from "../api/axios";
 
 const normalizeDashboardStats = (data = {}) => {
+  data = data || {};
   const stats = data.stats || {};
   const charts = data.charts || {};
   const alerts = data.alerts || {};
@@ -45,8 +46,19 @@ const normalizeDashboardStats = (data = {}) => {
   };
 };
 
-export const getAdminDashboardStats = async (date) => {
-  const params = date ? { date } : {};
+export const getAdminDashboardStats = async (filters = {}) => {
+  const params = {};
+  const startDate = filters?.startDate || filters?.start_date || "";
+  const endDate = filters?.endDate || filters?.end_date || "";
+
+  if (startDate) {
+    params.start_date = startDate;
+  }
+
+  if (endDate) {
+    params.end_date = endDate;
+  }
+
   const res = await API.get("/api/admin/dashboard/", { params });
   return normalizeDashboardStats(res.data);
 };

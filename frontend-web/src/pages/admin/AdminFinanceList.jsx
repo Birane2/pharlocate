@@ -5,10 +5,8 @@ import { dateTime, money } from "../finance/financeFormat";
 import {
   approveRefund,
   executeRefund,
-  getAdminInvoices,
   getAdminPendingPayments,
   getAdminRefunds,
-  getAdminSubscriptions,
   getAdminTransactions,
   rejectPayment,
   rejectRefund,
@@ -18,9 +16,7 @@ import {
 const loaders = {
   transactions: getAdminTransactions,
   payments: getAdminPendingPayments,
-  invoices: getAdminInvoices,
   refunds: getAdminRefunds,
-  subscriptions: getAdminSubscriptions,
 };
 
 function AdminFinanceList({ type, title }) {

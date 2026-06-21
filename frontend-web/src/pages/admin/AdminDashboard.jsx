@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -8,12 +8,16 @@ import {
   faBell,
   faBolt,
   faChartLine,
-  faCheckCircle,
   faCircleCheck,
   faClock,
+  faCreditCard,
   faHospital,
-  faPills,
+  faMoneyBillWave,
+  faReceipt,
+  faRotateLeft,
+  faShieldHalved,
   faTriangleExclamation,
+  faTruck,
   faUserDoctor,
   faUsersGear,
 } from "@fortawesome/free-solid-svg-icons";
@@ -23,16 +27,27 @@ import {
   CategoryScale,
   Chart as ChartJS,
   Legend,
+  LineElement,
   LinearScale,
+  PointElement,
   Tooltip,
 } from "chart.js";
-import { Bar, Doughnut } from "react-chartjs-2";
+import { Bar, Doughnut, Line } from "react-chartjs-2";
 import AdminStatsCard from "../../components/admin/AdminStatsCard";
 import AdminLayout from "../../layouts/AdminLayout";
 import { getAdminDashboardStats } from "../../services/adminService";
 import { getNotifications, markAllNotificationsRead } from "../../services/notificationService";
 
-ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+ChartJS.register(
+  ArcElement,
+  BarElement,
+  CategoryScale,
+  LineElement,
+  LinearScale,
+  PointElement,
+  Tooltip,
+  Legend
+);
 
 const emptyStats = {
   pharmacies: { total: 0, validees: 0, en_attente: 0, suspendues: 0 },
@@ -66,7 +81,7 @@ function getApiErrorMessage(error) {
     return "Acces refuse. Cette page est reservee aux administrateurs.";
   }
 
-  return "Impossible de charger les statistiques pour cette date.";
+  return "Impossible de charger les statistiques du dashboard.";
 }
 
 function formatDate(value) {
@@ -80,6 +95,21 @@ function formatDate(value) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatMoney(value) {
+  return `${Number(value || 0).toLocaleString("fr-FR", {
+    maximumFractionDigits: 0,
+  })} MRU`;
+}
+
+function formatMonth(value) {
+  if (!value) return "";
+  const [year, month] = String(value).split("-");
+  if (!year || !month) return value;
+  return new Intl.DateTimeFormat("fr-FR", { month: "short" }).format(
+    new Date(Number(year), Number(month) - 1, 1)
+  );
 }
 
 function getStatusLabel(status) {
@@ -159,41 +189,6 @@ function ChartCard({ title, children }) {
   );
 }
 
-function QuickAction({ label, to, icon, tone = "blue", onClick }) {
-  const toneClass =
-    tone === "turquoise"
-      ? "text-[#2FA6A3] group-hover:bg-[#2FA6A3]"
-      : tone === "green"
-        ? "text-[#10B981] group-hover:bg-[#10B981]"
-      : "text-[#2F6E9E] group-hover:bg-[#2F6E9E]";
-
-  const className = "group inline-flex min-h-[116px] flex-col items-center justify-center gap-3 rounded-2xl border border-[#E2E8F2] bg-white px-3 py-4 text-center text-xs font-bold text-[#1C2B4A] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md";
-  const iconClass = `flex h-11 w-11 items-center justify-center rounded-2xl bg-current/10 text-xl transition group-hover:text-white ${toneClass}`;
-
-  if (onClick) {
-    return (
-      <button type="button" onClick={onClick} className={className}>
-        <span className={iconClass}>
-          <FontAwesomeIcon icon={icon} className="h-5 w-5" />
-        </span>
-        {label}
-      </button>
-    );
-  }
-
-  return (
-    <Link
-      to={to}
-      className={className}
-    >
-      <span className={iconClass}>
-          <FontAwesomeIcon icon={icon} className="h-5 w-5" />
-      </span>
-      {label}
-    </Link>
-  );
-}
-
 const NOTIF_ICONS = {
   reservation: faCalendarCheck,
   payment: faBell,
@@ -227,10 +222,14 @@ function formatRelativeDate(dateStr) {
 function AdminDashboard() {
   const [stats, setStats] = useState(emptyStats);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [selectedDate, setSelectedDate] = useState(getTodayDate);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
   const [recentNotifs, setRecentNotifs] = useState([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const hasLoadedDashboard = useRef(false);
 
   const handleMarkAllNotifRead = useCallback(async () => {
     try {
@@ -253,7 +252,7 @@ function AdminDashboard() {
   useEffect(() => {
     let isMounted = true;
 
-    getAdminDashboardStats(selectedDate)
+    getAdminDashboardStats({ startDate, endDate })
       .then((data) => {
         if (isMounted) {
           setStats(data);
@@ -261,32 +260,39 @@ function AdminDashboard() {
       })
       .catch((err) => {
         if (isMounted) {
-          setStats(emptyStats);
           setError(getApiErrorMessage(err));
         }
       })
       .finally(() => {
         if (isMounted) {
+          hasLoadedDashboard.current = true;
           setLoading(false);
+          setRefreshing(false);
         }
       });
 
     return () => {
       isMounted = false;
     };
-  }, [selectedDate]);
+  }, [startDate, endDate, refreshKey]);
 
-  const apiAlerts = stats.alerts || {};
+  const apiAlerts = useMemo(() => stats.alerts || {}, [stats.alerts]);
   const pharmacies = stats.pharmacies || emptyStats.pharmacies;
   const users = stats.users || emptyStats.users;
+  const kpis = useMemo(() => stats.stats || {}, [stats.stats]);
+  const charts = stats.charts || {};
   const usersByRole = users.by_role || emptyStats.users.by_role;
   const reservations = stats.reservations || emptyStats.reservations;
   const medicaments = stats.medicaments || emptyStats.medicaments;
   const stocks = stats.stocks || emptyStats.stocks;
   const activities = stats.recent_activities || stats.latest_activities || [];
+  const topPharmacies = stats.top_pharmacies || [];
+  const activePeriodKey = `${startDate || "all"}-${endDate || "all"}`;
+  const hasPeriodFilter = Boolean(startDate || endDate);
   const hasNoDataForSelectedDate =
-    Boolean(selectedDate) &&
+    hasPeriodFilter &&
     !loading &&
+    !refreshing &&
     !error &&
     (pharmacies.total || 0) === 0 &&
     (users.total || 0) === 0 &&
@@ -297,43 +303,97 @@ function AdminDashboard() {
   const statCards = useMemo(
     () => [
       {
-        label: "Pharmacies totales",
-        value: pharmacies.total || 0,
+        label: "Utilisateurs",
+        value: kpis.total_users ?? users.total ?? 0,
+        icon: faUsersGear,
+        tone: "blue",
+      },
+      {
+        label: "Pharmaciens",
+        value: kpis.total_pharmacists ?? usersByRole.pharmacien ?? 0,
+        icon: faUserDoctor,
+        tone: "purple",
+      },
+      {
+        label: "Pharmacies",
+        value: kpis.total_pharmacies ?? pharmacies.total ?? 0,
         icon: faHospital,
         tone: "blue",
       },
       {
-        label: "En attente",
-        value: pharmacies.en_attente || 0,
+        label: "En validation",
+        value: kpis.pending_pharmacies ?? pharmacies.en_attente ?? 0,
         icon: faClock,
         tone: "orange",
       },
       {
         label: "Validees",
-        value: pharmacies.validees || 0,
+        value: kpis.validated_pharmacies ?? pharmacies.validees ?? 0,
         icon: faCircleCheck,
         tone: "green",
       },
       {
-        label: "Pharmaciens",
-        value: usersByRole.pharmacien || 0,
-        icon: faUserDoctor,
-        tone: "purple",
+        label: "Reservations",
+        value: kpis.total_reservations ?? reservations.total ?? 0,
+        icon: faCalendarCheck,
+        tone: "lightBlue",
       },
       {
-        label: "Medicaments",
-        value: medicaments.total || 0,
-        icon: faPills,
+        label: "Paiements attente",
+        value: kpis.pending_payments ?? apiAlerts.pending_payments ?? 0,
+        icon: faCreditCard,
+        tone: "orange",
+      },
+      {
+        label: "Paiements valides",
+        value: kpis.validated_payments ?? 0,
+        icon: faCreditCard,
         tone: "teal",
       },
       {
-        label: "Stocks",
-        value: stocks.total || 0,
-        icon: faBoxesStacked,
-        tone: (stocks.rupture || 0) > 0 ? "danger" : "lightBlue",
+        label: "Revenus abonnements",
+        value: formatMoney(kpis.subscription_revenue),
+        icon: faMoneyBillWave,
+        tone: "green",
+      },
+      {
+        label: "Commissions",
+        value: formatMoney(kpis.commissions_generated ?? kpis.commission_revenue),
+        icon: faReceipt,
+        tone: "blue",
+      },
+      {
+        label: "Factures impayees",
+        value: kpis.unpaid_commission_invoices ?? apiAlerts.unpaid_commission_invoices ?? 0,
+        icon: faTriangleExclamation,
+        tone: "danger",
+      },
+      {
+        label: "Remb. attente",
+        value: kpis.pending_refunds ?? apiAlerts.pending_refunds ?? 0,
+        icon: faRotateLeft,
+        tone: "orange",
+      },
+      {
+        label: "Livraisons actives",
+        value: kpis.active_deliveries ?? apiAlerts.active_deliveries ?? 0,
+        icon: faTruck,
+        tone: "teal",
+      },
+      {
+        label: "Standard",
+        value: kpis.standard_subscriptions ?? 0,
+        icon: faShieldHalved,
+        tone: "lightBlue",
+      },
+      {
+        label: "Premium",
+        value: kpis.premium_subscriptions ?? 0,
+        icon: faShieldHalved,
+        tone: "purple",
       },
     ],
-    [medicaments.total, pharmacies, stocks, usersByRole.pharmacien]
+    [apiAlerts, kpis, pharmacies, reservations.total, users.total, usersByRole.pharmacien]
   );
 
   const pharmacyChartData = useMemo(
@@ -380,6 +440,85 @@ function AdminDashboard() {
       reservations.recuperees,
       reservations.refusees,
     ]
+  );
+
+  const reservationsByMonthData = useMemo(
+    () => ({
+      labels: (charts.reservations_by_month || []).map((item) => formatMonth(item.month)),
+      datasets: [
+        {
+          label: "Reservations",
+          data: (charts.reservations_by_month || []).map((item) => item.count || 0),
+          borderColor: "#2F6E9E",
+          backgroundColor: "rgba(47,110,158,0.12)",
+          pointBackgroundColor: "#2FA6A3",
+          tension: 0.35,
+          fill: true,
+        },
+      ],
+    }),
+    [charts.reservations_by_month]
+  );
+
+  const revenueByMonthData = useMemo(
+    () => ({
+      labels: (charts.revenue_by_month || []).map((item) => formatMonth(item.month)),
+      datasets: [
+        {
+          label: "Revenus plateforme",
+          data: (charts.revenue_by_month || []).map((item) => Number(item.amount || 0)),
+          borderColor: "#2FA6A3",
+          backgroundColor: "rgba(47,166,163,0.12)",
+          pointBackgroundColor: "#2F6E9E",
+          tension: 0.35,
+          fill: true,
+        },
+      ],
+    }),
+    [charts.revenue_by_month]
+  );
+
+  const subscriptionsChartData = useMemo(
+    () => {
+      const plans = charts.subscriptions_by_plan || {};
+      return {
+        labels: ["Gratuit", "Standard", "Premium"],
+        datasets: [
+          {
+            data: [plans.free || 0, plans.standard || 0, plans.premium || 0],
+            backgroundColor: ["#4A8BBE", "#2FA6A3", "#1C2B4A"],
+            borderColor: "#FFFFFF",
+            borderWidth: 5,
+            hoverOffset: 6,
+          },
+        ],
+      };
+    },
+    [charts.subscriptions_by_plan]
+  );
+
+  const paymentsChartData = useMemo(
+    () => {
+      const paymentsByStatus = charts.payments_by_status || {};
+      return {
+        labels: ["Attente", "Valides", "Refuses", "Rembourses"],
+        datasets: [
+          {
+            label: "Paiements",
+            data: [
+              paymentsByStatus.pending || 0,
+              paymentsByStatus.validated || 0,
+              paymentsByStatus.rejected || 0,
+              paymentsByStatus.refunded || 0,
+            ],
+            backgroundColor: ["#F59E0B", "#2FA6A3", "#EF4444", "#4A8BBE"],
+            borderRadius: 10,
+            maxBarThickness: 36,
+          },
+        ],
+      };
+    },
+    [charts.payments_by_status]
   );
 
   const doughnutOptions = {
@@ -435,19 +574,62 @@ function AdminDashboard() {
     },
   };
 
-  const handleDateChange = (date) => {
-    setLoading(true);
+  const lineOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: "#FFFFFF",
+        titleColor: "#1C2B4A",
+        bodyColor: "#1C2B4A",
+        borderColor: "#E2E8F2",
+        borderWidth: 1,
+        displayColors: false,
+      },
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: { color: "#6B7280", font: { size: 11, weight: "600" } },
+      },
+      y: {
+        beginAtZero: true,
+        grid: { color: "#EEF2F7" },
+        ticks: { precision: 0, color: "#6B7280", font: { size: 11 } },
+      },
+    },
+  };
+
+  const applyPeriod = (nextStartDate, nextEndDate) => {
     setError("");
-    setStats(emptyStats);
-    setSelectedDate(date);
+    setRefreshing(hasLoadedDashboard.current);
+    setStartDate(nextStartDate);
+    setEndDate(nextEndDate);
+    setRefreshKey((currentKey) => currentKey + 1);
+  };
+
+  const handleStartDateChange = (date) => {
+    applyPeriod(date, endDate);
+  };
+
+  const handleEndDateChange = (date) => {
+    applyPeriod(startDate, date);
   };
 
   const handleToday = () => {
-    handleDateChange(getTodayDate());
+    const today = getTodayDate();
+    applyPeriod(today, today);
   };
 
-  const handleReset = () => {
-    handleDateChange("");
+  const handleAllData = () => {
+    applyPeriod("", "");
+  };
+
+  const handleRefresh = () => {
+    setError("");
+    setRefreshing(hasLoadedDashboard.current);
+    setRefreshKey((currentKey) => currentKey + 1);
   };
 
   return (
@@ -455,12 +637,22 @@ function AdminDashboard() {
       title="Dashboard administrateur"
       subtitle="Vue generale de l'activite PharmaLocate."
       showDateFilter
-      selectedDate={selectedDate}
-      onDateChange={handleDateChange}
+      startDate={startDate}
+      endDate={endDate}
+      onStartDateChange={handleStartDateChange}
+      onEndDateChange={handleEndDateChange}
       onTodayClick={handleToday}
-      onResetClick={handleReset}
+      onAllDataClick={handleAllData}
+      onResetClick={handleRefresh}
+      actionLoading={refreshing}
     >
       <div className="space-y-5">
+        {refreshing && (
+          <div className="rounded-2xl border border-[#2FA6A3]/20 bg-[#2FA6A3]/8 px-4 py-3 text-sm font-bold text-[#167769] shadow-sm">
+            Actualisation du dashboard en cours...
+          </div>
+        )}
+
         {error && (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
             {error}
@@ -469,7 +661,7 @@ function AdminDashboard() {
 
         {hasNoDataForSelectedDate && (
           <div className="rounded-2xl border border-[#2F6E9E]/10 bg-white px-4 py-3 text-sm font-bold text-[#6B7280] shadow-sm">
-            Aucune donnee disponible pour cette date.
+            Aucune donnee disponible pour cette periode.
           </div>
         )}
 
@@ -494,15 +686,43 @@ function AdminDashboard() {
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
               <ChartCard title="Repartition des pharmacies">
                 <Doughnut
-                  key={`pharmacies-${selectedDate || "all"}`}
+                  key={`pharmacies-${activePeriodKey}`}
                   data={pharmacyChartData}
                   options={doughnutOptions}
                 />
               </ChartCard>
               <ChartCard title="Reservations par statut">
                 <Bar
-                  key={`reservations-${selectedDate || "all"}`}
+                  key={`reservations-${activePeriodKey}`}
                   data={reservationChartData}
+                  options={barOptions}
+                />
+              </ChartCard>
+              <ChartCard title="Reservations par mois">
+                <Line
+                  key={`reservation-month-${activePeriodKey}`}
+                  data={reservationsByMonthData}
+                  options={lineOptions}
+                />
+              </ChartCard>
+              <ChartCard title="Revenus plateforme">
+                <Line
+                  key={`revenue-${activePeriodKey}`}
+                  data={revenueByMonthData}
+                  options={lineOptions}
+                />
+              </ChartCard>
+              <ChartCard title="Abonnements par plan">
+                <Doughnut
+                  key={`subscriptions-${activePeriodKey}`}
+                  data={subscriptionsChartData}
+                  options={doughnutOptions}
+                />
+              </ChartCard>
+              <ChartCard title="Paiements par statut">
+                <Bar
+                  key={`payments-${activePeriodKey}`}
+                  data={paymentsChartData}
                   options={barOptions}
                 />
               </ChartCard>
@@ -539,11 +759,85 @@ function AdminDashboard() {
                 icon={faCalendarCheck}
                 tone="blue"
               />
+              <PriorityAlert
+                label="Paiements a verifier"
+                value={apiAlerts.pending_payments ?? 0}
+                icon={faCreditCard}
+                tone="orange"
+              />
+              <PriorityAlert
+                label="Factures commissions impayees"
+                value={apiAlerts.unpaid_commission_invoices ?? 0}
+                icon={faReceipt}
+                tone="danger"
+              />
             </div>
           </aside>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
+        <section className="grid gap-5 xl:grid-cols-[1fr_0.8fr]">
+          <article className="rounded-2xl border border-[#E2E8F2] bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-[#1C2B4A]">Top pharmacies</h2>
+                <p className="mt-1 text-xs font-semibold text-[#6B7280]">
+                  Classement par revenus enregistrés.
+                </p>
+              </div>
+              <FontAwesomeIcon icon={faHospital} className="h-4 w-4 text-[#2FA6A3]" />
+            </div>
+            {topPharmacies.length === 0 ? (
+              <p className="mt-4 rounded-xl bg-[#F8FAFC] px-3 py-4 text-sm font-semibold text-[#6B7280]">
+                Aucune pharmacie avec revenus pour cette période.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-2">
+                {topPharmacies.map((pharmacy) => (
+                  <div
+                    key={pharmacy.id}
+                    className="flex items-center justify-between gap-3 rounded-xl bg-[#F8FAFC] px-3 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-[#1C2B4A]">
+                        {pharmacy.name || pharmacy.pharmacy_name || "Pharmacie non renseignée"}
+                      </p>
+                      <p className="mt-0.5 text-[11px] font-semibold text-[#6B7280]">
+                        {pharmacy.orders || 0} commande(s)
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-sm font-black text-[#2F6E9E]">
+                      {formatMoney(pharmacy.revenue)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+
+          <article className="rounded-2xl border border-[#E2E8F2] bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-[#1C2B4A]">Synthèse pharmacies</h2>
+                <p className="mt-1 text-xs font-semibold text-[#6B7280]">
+                  Validation et activité globale.
+                </p>
+              </div>
+              <FontAwesomeIcon icon={faCircleCheck} className="h-4 w-4 text-[#2F6E9E]" />
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <div className="rounded-xl bg-[#2FA6A3]/10 px-3 py-3">
+                <p className="text-xl font-black text-[#1C2B4A]">{pharmacies.validees || 0}</p>
+                <p className="text-[11px] font-semibold text-[#6B7280]">Validées</p>
+              </div>
+              <div className="rounded-xl bg-orange-50 px-3 py-3">
+                <p className="text-xl font-black text-[#1C2B4A]">{pharmacies.en_attente || 0}</p>
+                <p className="text-[11px] font-semibold text-[#6B7280]">En attente</p>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section className="grid gap-5">
         <div className="overflow-hidden rounded-2xl border border-[#E2E8F2] bg-white shadow-sm">
           <div className="flex items-center justify-between gap-3 px-4 py-4">
             <div className="flex items-center gap-3">
@@ -638,39 +932,6 @@ function AdminDashboard() {
             </>
           )}
         </div>
-
-        <aside className="rounded-2xl border border-[#E2E8F2] bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <FontAwesomeIcon icon={faBolt} className="h-4 w-4 text-[#6B7280]" />
-            <h2 className="text-base font-bold text-[#1C2B4A]">Actions rapides</h2>
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <QuickAction
-              label="Valider pharmacies"
-              to="/admin/pharmacies-validation"
-              icon={faCheckCircle}
-            />
-            <QuickAction
-              label="Gerer pharmacies"
-              to="/admin/pharmacies"
-              icon={faHospital}
-              tone="turquoise"
-            />
-            <QuickAction
-              label="Gerer utilisateurs"
-              to="/admin/users"
-              icon={faUsersGear}
-              tone="green"
-            />
-            <QuickAction
-              label="Voir statistiques"
-              icon={faChartLine}
-              onClick={() =>
-                document.getElementById("analyse")?.scrollIntoView({ behavior: "smooth" })
-              }
-            />
-          </div>
-        </aside>
         </section>
 
         {/* Recent system notifications */}
