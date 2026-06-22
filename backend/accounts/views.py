@@ -15,13 +15,18 @@ from .serializers import (
     AdminPasswordChangeSerializer,
     AdminProfileSerializer,
     AdminProfileUpdateSerializer,
+    ForgotPasswordSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     PasswordResetVerifySerializer,
     PhoneLoginSerializer,
     RegisterSerializer,
     ResendRegisterOTPSerializer,
+    ResetPasswordSerializer,
+    UserChangePasswordSerializer,
+    UserProfileUpdateSerializer,
     VerifyRegisterOTPSerializer,
+    VerifyResetOtpSerializer,
 )
 from .services.otp_service import (
     OTPDeliveryError,
@@ -113,11 +118,8 @@ class AdminPasswordChangeView(APIView):
         })
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticatedWithTokenMessage])
-def profile_view(request):
-    user = request.user
-    return Response({
+def _profile_data(user):
+    return {
         'id': user.id,
         'first_name': user.first_name,
         'last_name': user.last_name,
@@ -128,7 +130,26 @@ def profile_view(request):
         'is_phone_verified': user.is_phone_verified,
         'email': user.email,
         'role': user.role,
-    })
+    }
+
+
+@api_view(['GET', 'PUT', 'PATCH'])
+@permission_classes([IsAuthenticatedWithTokenMessage])
+def profile_view(request):
+    user = request.user
+    if request.method == 'GET':
+        return Response(_profile_data(user))
+
+    serializer = UserProfileUpdateSerializer(
+        user,
+        data=request.data,
+        partial=request.method == 'PATCH',
+        context={'request': request},
+    )
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    user.refresh_from_db()
+    return Response(_profile_data(user))
 
 
 @api_view(['GET'])
@@ -334,3 +355,88 @@ def password_reset_confirm_view(request):
     return Response({
         'message': 'Mot de passe reinitialise avec succes.'
     })
+
+
+# ── Mobile-facing auth endpoints ───────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def forgot_password_view(request):
+    """POST /api/auth/forgot-password/  body: {email}"""
+    serializer = ForgotPasswordSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    email = serializer.validated_data['email']
+
+    # Always return neutral message — never reveal whether account exists
+    try:
+        request_password_reset(email)
+    except (PasswordResetRateLimitError, PasswordResetDeliveryError):
+        pass
+
+    return Response({
+        'message': 'Si un compte existe avec cet e-mail, un code OTP a été envoyé.',
+        'email': email,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_reset_otp_view(request):
+    """POST /api/auth/verify-reset-otp/  body: {email, otp}"""
+    serializer = VerifyResetOtpSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    email = serializer.validated_data['email']
+    otp = serializer.validated_data['otp']
+
+    try:
+        reset_otp = verify_password_reset_otp(email, otp)
+    except PasswordResetVerificationError as exc:
+        return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({
+        'message': 'Code vérifié avec succès.',
+        'reset_token': reset_otp.reset_token,
+        'email': email,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reset_password_view(request):
+    """POST /api/auth/reset-password/  body: {email, reset_token, new_password, confirm_password}"""
+    serializer = ResetPasswordSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    email = serializer.validated_data['email']
+    reset_token = serializer.validated_data['reset_token']
+    new_password = serializer.validated_data['new_password']
+
+    try:
+        confirm_password_reset(email, reset_token, new_password)
+    except DjangoValidationError as exc:
+        return Response(
+            {'new_password': list(exc.messages)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except PasswordResetConfirmError as exc:
+        return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({'message': 'Mot de passe réinitialisé avec succès.'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticatedWithTokenMessage])
+def change_password_view(request):
+    """POST /api/auth/change-password/  body: {old_password, new_password, confirm_password}"""
+    serializer = UserChangePasswordSerializer(
+        data=request.data,
+        context={'request': request},
+    )
+    serializer.is_valid(raise_exception=True)
+
+    request.user.set_password(serializer.validated_data['new_password'])
+    request.user.save(update_fields=['password'])
+
+    return Response({'message': 'Mot de passe modifié avec succès.'})

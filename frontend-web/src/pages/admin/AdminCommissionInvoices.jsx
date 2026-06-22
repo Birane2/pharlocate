@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import AdminLayout from "../../layouts/AdminLayout";
+import API from "../../api/axios";
 import { PageCard, StatusBadge } from "../finance/FinanceUI";
 import { dateOnly, money } from "../finance/financeFormat";
 import {
@@ -26,11 +27,39 @@ function GenerateModal({ onClose, onDone }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [pharmacies, setPharmacies] = useState([]);
+  const [loadingPharmacies, setLoadingPharmacies] = useState(true);
+  const [pharmaciesError, setPharmaciesError] = useState("");
+
+  useEffect(() => {
+    const fetchPharmacies = async () => {
+      setLoadingPharmacies(true);
+      setPharmaciesError("");
+      try {
+        const res = await API.get("/api/admin/pharmacies/", {
+          params: { statut_validation: "validee", page_size: 200 },
+        });
+        const data = res.data;
+        const list = Array.isArray(data) ? data : data?.results || [];
+        setPharmacies(list);
+      } catch {
+        setPharmaciesError("Impossible de charger les pharmacies.");
+      } finally {
+        setLoadingPharmacies(false);
+      }
+    };
+    fetchPharmacies();
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    if (!pharmacyId || !periodStart || !periodEnd) {
-      setError("Pharmacie, début et fin de période sont obligatoires.");
+    if (!pharmacyId) {
+      setError("Veuillez sélectionner une pharmacie.");
+      return;
+    }
+    if (!periodStart || !periodEnd) {
+      setError("Les dates de début et fin de période sont obligatoires.");
       return;
     }
     setLoading(true);
@@ -52,50 +81,90 @@ function GenerateModal({ onClose, onDone }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1C2B4A]/40 px-4">
       <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
-        <h2 className="text-xl font-black text-[#1C2B4A]">
-          Générer une facture commission
-        </h2>
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <label>
-            <span className="text-sm font-bold text-[#1C2B4A]">
-              ID Pharmacie <span className="text-red-500">*</span>
-            </span>
-            <input
-              type="number"
-              value={pharmacyId}
-              onChange={(e) => setPharmacyId(e.target.value)}
-              placeholder="Ex: 12"
-              className="mt-1 w-full rounded-xl border border-[#DDEBF0] px-3 py-2 text-sm font-semibold outline-none focus:border-[#2FA6A3]"
-            />
-          </label>
+        <div className="flex items-center gap-2">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#2FA6A3]/10">
+            <svg className="h-5 w-5 text-[#2FA6A3]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-black text-[#1C2B4A]">
+            Générer une facture commission
+          </h2>
+        </div>
+
+        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+          {/* Pharmacy select */}
+          <div>
+            <label className="block text-sm font-bold text-[#1C2B4A]">
+              Sélectionner une pharmacie <span className="text-red-500">*</span>
+            </label>
+            {loadingPharmacies ? (
+              <div className="mt-1 flex items-center gap-2 rounded-xl border border-[#DDEBF0] px-3 py-2.5">
+                <svg className="h-4 w-4 animate-spin text-[#2FA6A3]" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                </svg>
+                <span className="text-sm text-[#9CA3AF]">Chargement des pharmacies...</span>
+              </div>
+            ) : pharmaciesError ? (
+              <div className="mt-1 rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">
+                {pharmaciesError}
+              </div>
+            ) : pharmacies.length === 0 ? (
+              <div className="mt-1 rounded-xl bg-amber-50 px-3 py-2 text-sm font-bold text-amber-700">
+                Aucune pharmacie validée disponible.
+              </div>
+            ) : (
+              <select
+                value={pharmacyId}
+                onChange={(e) => setPharmacyId(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-[#DDEBF0] bg-white px-3 py-2.5 text-sm font-semibold text-[#1C2B4A] outline-none focus:border-[#2FA6A3] disabled:bg-[#F8FAFC]"
+              >
+                <option value="">— Sélectionner une pharmacie —</option>
+                {pharmacies.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nom}
+                    {p.adresse ? ` — ${p.adresse}` : ""}
+                    {p.pharmacien_username ? ` — ${p.pharmacien_username}` : ""}
+                    {" — Validée"}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Period dates */}
           <div className="grid grid-cols-2 gap-3">
-            <label>
-              <span className="text-sm font-bold text-[#1C2B4A]">
+            <div>
+              <label className="block text-sm font-bold text-[#1C2B4A]">
                 Début période <span className="text-red-500">*</span>
-              </span>
+              </label>
               <input
                 type="date"
                 value={periodStart}
                 onChange={(e) => setPeriodStart(e.target.value)}
                 className="mt-1 w-full rounded-xl border border-[#DDEBF0] px-3 py-2 text-sm outline-none focus:border-[#2FA6A3]"
               />
-            </label>
-            <label>
-              <span className="text-sm font-bold text-[#1C2B4A]">
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-[#1C2B4A]">
                 Fin période <span className="text-red-500">*</span>
-              </span>
+              </label>
               <input
                 type="date"
                 value={periodEnd}
                 onChange={(e) => setPeriodEnd(e.target.value)}
                 className="mt-1 w-full rounded-xl border border-[#DDEBF0] px-3 py-2 text-sm outline-none focus:border-[#2FA6A3]"
               />
-            </label>
+            </div>
           </div>
-          <label>
-            <span className="text-sm font-bold text-[#1C2B4A]">
-              Date limite paiement (optionnel)
-            </span>
+
+          {/* Due date */}
+          <div>
+            <label className="block text-sm font-bold text-[#1C2B4A]">
+              Date limite paiement{" "}
+              <span className="font-normal text-[#9CA3AF]">(optionnel)</span>
+            </label>
             <input
               type="date"
               value={dueDate}
@@ -105,23 +174,25 @@ function GenerateModal({ onClose, onDone }) {
             <p className="mt-1 text-xs text-[#9CA3AF]">
               Par défaut : fin de période + 15 jours.
             </p>
-          </label>
+          </div>
+
           {error && (
             <div className="rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
               {error}
             </div>
           )}
-          <div className="flex justify-end gap-2">
+
+          <div className="flex justify-end gap-2 pt-1">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-[#DDEBF0] px-4 py-2 text-sm font-black text-[#2F6E9E]"
+              className="rounded-xl border border-[#DDEBF0] px-4 py-2 text-sm font-black text-[#2F6E9E] hover:bg-[#F8FAFC]"
             >
               Annuler
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || loadingPharmacies || pharmacies.length === 0}
               className="rounded-xl bg-[#2FA6A3] px-5 py-2 text-sm font-black text-white disabled:opacity-60"
             >
               {loading ? "Génération..." : "Générer"}

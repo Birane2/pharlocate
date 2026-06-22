@@ -625,6 +625,18 @@ class AdminCommissionInvoiceGenerateView(APIView):
         except Pharmacy.DoesNotExist:
             return Response({'error': 'Pharmacie introuvable.'}, status=status.HTTP_404_NOT_FOUND)
 
+        if not pharmacy.est_valide or pharmacy.statut_validation != 'validee':
+            return Response(
+                {'error': 'Cette pharmacie n\'est pas validée.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if pharmacy.statut_validation == 'suspendue':
+            return Response(
+                {'error': 'Cette pharmacie est suspendue.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             period_start = datetime.date.fromisoformat(period_start_str)
             period_end = datetime.date.fromisoformat(period_end_str)

@@ -3,14 +3,18 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
     LoginView,
+    change_password_view,
+    forgot_password_view,
     password_reset_confirm_view,
     password_reset_request_view,
     password_reset_verify_view,
     profile_view,
     register_view,
     resend_register_otp_view,
+    reset_password_view,
     test_api,
     verify_register_otp_view,
+    verify_reset_otp_view,
 )
 
 urlpatterns = [
@@ -40,4 +44,9 @@ urlpatterns = [
     ),
     path('refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('profile/', profile_view, name='profile'),
+    # Mobile-facing endpoints
+    path('forgot-password/', forgot_password_view, name='forgot_password'),
+    path('verify-reset-otp/', verify_reset_otp_view, name='verify_reset_otp'),
+    path('reset-password/', reset_password_view, name='reset_password'),
+    path('change-password/', change_password_view, name='change_password'),
 ]

@@ -318,3 +318,97 @@ class AdminPasswordChangeSerializer(serializers.Serializer):
 
         validate_password(attrs['new_password'], self.context['request'].user)
         return attrs
+
+
+# ── User-facing profile & password serializers ─────────────────────────────
+
+class UserProfileUpdateSerializer(serializers.ModelSerializer):
+    first_name = serializers.CharField(required=True, min_length=1)
+    last_name = serializers.CharField(required=True, min_length=1)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    phone_number = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'email', 'phone_number']
+
+    def validate_email(self, value):
+        value = value.strip().lower()
+        if value and User.objects.filter(email__iexact=value).exclude(pk=self.instance.pk).exists():
+            raise serializers.ValidationError('Cette adresse e-mail est déjà utilisée.')
+        return value
+
+    def validate_phone_number(self, value):
+        if not value:
+            return value
+        phone = validate_mauritanian_phone(value)
+        if User.objects.filter(phone_number=phone).exclude(pk=self.instance.pk).exists():
+            raise serializers.ValidationError('Ce numéro de téléphone est déjà utilisé.')
+        return phone
+
+
+class UserChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate_old_password(self, value):
+        if not self.context['request'].user.check_password(value):
+            raise serializers.ValidationError('Ancien mot de passe incorrect.')
+        return value
+
+    def validate(self, attrs):
+        if attrs['new_password'] != attrs['confirm_password']:
+            raise serializers.ValidationError(
+                {'confirm_password': 'Les mots de passe ne correspondent pas.'}
+            )
+        validate_password(attrs['new_password'], self.context['request'].user)
+        return attrs
+
+
+def _extract_email(attrs):
+    """Accept both 'email' and 'identifier' fields — returns lowercased email."""
+    email = (attrs.get('email') or attrs.get('identifier') or '').strip().lower()
+    if not email:
+        raise serializers.ValidationError({'email': 'L\'adresse e-mail est obligatoire.'})
+    return email
+
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=False, allow_blank=True)
+    identifier = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        attrs['email'] = _extract_email(attrs)
+        return attrs
+
+
+class VerifyResetOtpSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=False, allow_blank=True)
+    identifier = serializers.CharField(required=False, allow_blank=True)
+    otp = serializers.CharField(min_length=6, max_length=6)
+
+    def validate_otp(self, value):
+        if not value.isdigit():
+            raise serializers.ValidationError('Le code OTP doit contenir 6 chiffres.')
+        return value
+
+    def validate(self, attrs):
+        attrs['email'] = _extract_email(attrs)
+        return attrs
+
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=False, allow_blank=True)
+    identifier = serializers.CharField(required=False, allow_blank=True)
+    reset_token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        attrs['email'] = _extract_email(attrs)
+        if attrs['new_password'] != attrs['confirm_password']:
+            raise serializers.ValidationError(
+                {'confirm_password': 'Les mots de passe ne correspondent pas.'}
+            )
+        return attrs
