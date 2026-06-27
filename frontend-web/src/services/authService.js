@@ -24,14 +24,17 @@ export async function registerUser(formData) {
 }
 
 export async function resendEmailOtp(email) {
-  const response = await API.post("/api/auth/resend-otp/", { email });
+  const response = await API.post("/api/auth/resend-email-otp/", { email });
   return response.data;
 }
 
 export async function verifyEmailOtp(email, otp) {
-  const response = await API.post("/api/auth/verify-otp/", { email, otp });
+  const response = await API.post("/api/auth/verify-email-otp/", { email, otp });
   return response.data;
 }
+
+export const verifyRegisterOtp = verifyEmailOtp;
+export const resendRegisterOtp = resendEmailOtp;
 
 export async function requestPasswordReset(email) {
   const response = await API.post("/api/auth/password-reset/request/", {

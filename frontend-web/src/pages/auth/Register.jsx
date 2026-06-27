@@ -66,6 +66,32 @@ function getPasswordStrength(password) {
   };
 }
 
+function validatePassword(password) {
+  const commonPasswords = new Set([
+    "password",
+    "password123",
+    "12345678",
+    "123456789",
+    "azerty123",
+    "qwerty123",
+  ]);
+  const normalized = password.trim().toLowerCase();
+
+  if (!password) return "Mot de passe obligatoire.";
+  if (password.length < 8) return "Minimum 8 caracteres.";
+  if (commonPasswords.has(normalized)) {
+    return "Mot de passe trop courant. Choisissez un mot de passe plus securise.";
+  }
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password)) {
+    return "Ajoutez au moins une majuscule et une minuscule.";
+  }
+  if (!/\d/.test(password)) return "Ajoutez au moins un chiffre.";
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    return "Ajoutez au moins un caractere special.";
+  }
+  return "";
+}
+
 function AuthField({
   label,
   icon,
@@ -139,6 +165,17 @@ function Register() {
     const phoneErr = validatePhone(form.phone_number);
     if (phoneErr) {
       setPhoneError(phoneErr);
+      return;
+    }
+
+    const passwordErr = validatePassword(form.password);
+    if (passwordErr) {
+      setError(passwordErr);
+      return;
+    }
+
+    if (form.password !== form.password_confirm) {
+      setError("Les mots de passe ne correspondent pas.");
       return;
     }
 

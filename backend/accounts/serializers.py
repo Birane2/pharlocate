@@ -1,5 +1,6 @@
 import re
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
@@ -7,6 +8,21 @@ from .models import User
 
 MAURITANIA_PHONE_REGEX = re.compile(r'^\+222[234]\d{7}$')
 LOCAL_MAURITANIA_PHONE_REGEX = re.compile(r'^[234]\d{7}$')
+
+
+def translate_password_error(message):
+    translations = {
+        'This password is too common.': (
+            'Ce mot de passe est trop courant. Choisissez un mot de passe plus securise.'
+        ),
+        'This password is entirely numeric.': (
+            'Ce mot de passe ne doit pas contenir uniquement des chiffres.'
+        ),
+        'This password is too short. It must contain at least 8 characters.': (
+            'Ce mot de passe est trop court. Il doit contenir au moins 8 caracteres.'
+        ),
+    }
+    return translations.get(message, message)
 
 
 def normalize_phone_number(phone_number):
@@ -52,6 +68,7 @@ def validate_mauritanian_phone(phone_number):
 
 
 class PhoneLoginSerializer(serializers.Serializer):
+    identifier = serializers.CharField(required=False, allow_blank=True)
     phone_number = serializers.CharField(required=False, allow_blank=True)
     phone = serializers.CharField(required=False, allow_blank=True)
     email = serializers.EmailField(required=False, allow_blank=True)
@@ -60,7 +77,8 @@ class PhoneLoginSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         identifier = (
-            attrs.get('phone_number')
+            attrs.get('identifier')
+            or attrs.get('phone_number')
             or attrs.get('phone')
             or attrs.get('email')
             or attrs.get('username')
@@ -127,7 +145,12 @@ class RegisterSerializer(serializers.ModelSerializer):
                 'password': 'Les mots de passe ne correspondent pas.'
             })
 
-        validate_password(attrs['password'])
+        try:
+            validate_password(attrs['password'])
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({
+                'password': [translate_password_error(message) for message in exc.messages]
+            }) from exc
 
         full_name = (attrs.get('full_name') or '').strip()
         first_name = (attrs.get('first_name') or '').strip()

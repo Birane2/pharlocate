@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>Nous utilisons votre position pour afficher les pharmacies proches.</string>
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
@@ -24,12 +26,6 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Nous utilisons votre position pour calculer la livraison et afficher les pharmacies proches.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Nous utilisons votre galerie pour joindre une capture de paiement.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Nous utilisons l'appareil photo si vous souhaitez prendre une capture de paiement.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

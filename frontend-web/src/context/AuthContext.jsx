@@ -107,7 +107,7 @@ export function AuthProvider({ children }) {
   };
 
   const verifyEmailOtp = async (email, otp) => {
-    const res = await API.post("/api/auth/verify-otp/", {
+    const res = await API.post("/api/auth/verify-email-otp/", {
       email,
       otp,
     });
@@ -116,7 +116,7 @@ export function AuthProvider({ children }) {
   };
 
   const resendEmailOtp = async (email) => {
-    const res = await API.post("/api/auth/resend-otp/", {
+    const res = await API.post("/api/auth/resend-email-otp/", {
       email,
     });
     return res.data;
