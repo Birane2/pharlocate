@@ -10,6 +10,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../context/AuthContext";
 import Logo from "../../components/ui/Logo";
+import { sanitizePhone, validatePhone } from "../../utils/phoneValidation";
 
 function getApiError(err) {
   const data = err.response?.data;
@@ -24,7 +25,7 @@ function getApiError(err) {
     data?.non_field_errors?.[0] ||
     err.message;
 
-  return message || "Téléphone,  ou mot de passe incorrect.";
+  return message || "Téléphone ou mot de passe incorrect.";
 }
 
 function Login() {
@@ -36,12 +37,20 @@ function Login() {
     password: "",
   });
   const [error, setError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
   const handleChange = (event) => {
-    setForm({ ...form, [event.target.name]: event.target.value });
+    const { name, value } = event.target;
+    if (name === "phone_number") {
+      const clean = sanitizePhone(value);
+      setForm({ ...form, phone_number: clean });
+      setPhoneError(validatePhone(clean) || "");
+    } else {
+      setForm({ ...form, [name]: value });
+    }
   };
 
   const redirectByRole = (profile) => {
@@ -57,6 +66,13 @@ function Login() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
+
+    const phoneErr = validatePhone(form.phone_number);
+    if (phoneErr) {
+      setPhoneError(phoneErr);
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -106,14 +122,21 @@ function Login() {
               />
               <input
                 name="phone_number"
-                type="text"
-                placeholder="Ex : +222XXXXXXXX "
+                type="tel"
+                inputMode="numeric"
+                placeholder="Ex : 22345678"
                 value={form.phone_number}
                 onChange={handleChange}
+                maxLength={8}
                 required
                 className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium text-[#1C2B4A] outline-none placeholder:text-[#9CA3AF]"
               />
             </div>
+            {phoneError && (
+              <p className="mt-1 text-xs font-semibold text-[#DC2626]">
+                {phoneError}
+              </p>
+            )}
           </div>
 
           <div>
@@ -183,7 +206,7 @@ function Login() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !!validatePhone(form.phone_number)}
             className="flex h-12 w-full items-center justify-center rounded-xl bg-[#2F6E9E] text-sm font-bold text-white shadow-lg shadow-[#2F6E9E]/20 transition hover:bg-[#265B84] focus:outline-none focus:ring-4 focus:ring-[#2F6E9E]/20 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {loading ? "Connexion..." : "Se connecter"}

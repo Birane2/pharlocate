@@ -1,12 +1,26 @@
 from rest_framework import serializers
 
 from pharmacies.models import Pharmacy
-from .models import Avis
+from .models import Avis, ReviewReply
+
+
+class ReviewReplySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReviewReply
+        fields = ['id', 'message', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_message(self, value):
+        normalized = value.strip()
+        if not normalized:
+            raise serializers.ValidationError('La reponse ne peut pas etre vide.')
+        return normalized
 
 
 class AvisSerializer(serializers.ModelSerializer):
     pharmacie_nom = serializers.CharField(source='pharmacie.nom', read_only=True)
     user_username = serializers.CharField(source='user.username', read_only=True)
+    reply = ReviewReplySerializer(read_only=True)
 
     class Meta:
         model = Avis
@@ -18,8 +32,9 @@ class AvisSerializer(serializers.ModelSerializer):
             'note',
             'commentaire',
             'date',
+            'reply',
         ]
-        read_only_fields = ['id', 'pharmacie_nom', 'user_username', 'date']
+        read_only_fields = ['id', 'pharmacie_nom', 'user_username', 'date', 'reply']
 
     def validate_pharmacie(self, value):
         if not Pharmacy.objects.filter(

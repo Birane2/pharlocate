@@ -1,17 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faChartSimple,
+  faCheckCircle,
   faChevronLeft,
   faChevronRight,
   faCommentDots,
+  faPaperPlane,
+  faPencil,
+  faReply,
   faStar,
+  faTrash,
 } from "@fortawesome/free-solid-svg-icons";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import ErrorMessage from "../../components/common/ErrorMessage";
 import Loading from "../../components/common/Loading";
 import { pharmacistLinks } from "../../routes/dashboardLinks";
-import { getPharmacienAvis } from "../../services/avisService";
+import {
+  deleteReply,
+  getPharmacienAvis,
+  postReply,
+  updateReply,
+} from "../../services/avisService";
 
 const PAGE_SIZE = 5;
 const GOLD = "#F4B400";
@@ -110,36 +120,225 @@ function StatCard({ label, value, icon, tone = "blue" }) {
   );
 }
 
+function ReplyForm({ reviewId, existingReply, onSuccess, onCancel }) {
+  const [message, setMessage] = useState(existingReply?.message || "");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    const trimmed = message.trim();
+    if (!trimmed) {
+      setError("La reponse ne peut pas etre vide.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      let result;
+      if (existingReply) {
+        result = await updateReply(existingReply.id, trimmed);
+      } else {
+        result = await postReply(reviewId, trimmed);
+      }
+      onSuccess(result);
+    } catch (err) {
+      const msg =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        "Une erreur est survenue.";
+      setError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-2 space-y-2">
+      <textarea
+        ref={textareaRef}
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        placeholder="Ecrivez votre reponse officielle..."
+        rows={3}
+        disabled={submitting}
+        className="w-full resize-none rounded-xl border border-[#2F6E9E]/20 bg-[#F8FAFC] px-3 py-2 text-sm text-[#1C2B4A] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#2FA6A3] focus:ring-2 focus:ring-[#2FA6A3]/15 disabled:opacity-60"
+      />
+      {error && (
+        <p className="text-xs font-semibold text-[#DC2626]">{error}</p>
+      )}
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={submitting}
+          className="flex items-center gap-1.5 rounded-lg bg-[#2F6E9E] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-[#265B84] disabled:opacity-60"
+        >
+          <FontAwesomeIcon icon={faPaperPlane} className="h-3 w-3" />
+          {submitting ? "Envoi..." : existingReply ? "Modifier" : "Repondre"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={submitting}
+          className="rounded-lg px-3 py-1.5 text-xs font-bold text-[#6B7280] transition hover:bg-[#F1F5F9] disabled:opacity-60"
+        >
+          Annuler
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function ReviewItem({ review, onReplyChanged }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [reply, setReply] = useState(review.reply || null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleReplySuccess = (newReply) => {
+    setReply(newReply);
+    setShowForm(false);
+    setEditing(false);
+    onReplyChanged();
+  };
+
+  const handleDeleteReply = async () => {
+    if (!window.confirm("Supprimer cette reponse ?")) return;
+    setDeleting(true);
+    try {
+      await deleteReply(reply.id);
+      setReply(null);
+      onReplyChanged();
+    } catch {
+      /* silent */
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <article className="rounded-xl border border-[#E2E8F2] px-3 py-2.5 transition hover:border-[#2F6E9E]/25 hover:bg-[#F8FAFC]">
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2F6E9E]/10 text-xs font-black text-[#2F6E9E]">
+          {getUserInitials(review.user_username)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-bold text-[#1C2B4A]">
+              {review.user_username || "Client"}
+            </p>
+            <StarRating value={Number(review.note || 0)} />
+          </div>
+          <p className="mt-1 text-sm leading-5 text-[#4B5563]">
+            {review.commentaire || "Aucun commentaire."}
+          </p>
+          <time className="mt-1 block text-[11px] font-semibold text-[#6B7280]">
+            {formatDate(review.date)}
+          </time>
+
+          {reply && !editing && (
+            <div className="mt-2.5 rounded-xl border border-[#2FA6A3]/25 bg-[#E8F7F3] px-3 py-2">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-[11px] font-black text-[#2FA6A3]">
+                  <FontAwesomeIcon icon={faCheckCircle} className="h-3 w-3" />
+                  Reponse officielle
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(true)}
+                    className="flex h-6 w-6 items-center justify-center rounded-lg text-[#6B7280] transition hover:bg-[#2F6E9E]/10 hover:text-[#2F6E9E]"
+                    title="Modifier la reponse"
+                  >
+                    <FontAwesomeIcon icon={faPencil} className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteReply}
+                    disabled={deleting}
+                    className="flex h-6 w-6 items-center justify-center rounded-lg text-[#6B7280] transition hover:bg-[#EF4444]/10 hover:text-[#EF4444] disabled:opacity-50"
+                    title="Supprimer la reponse"
+                  >
+                    <FontAwesomeIcon icon={faTrash} className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+              <p className="text-sm leading-5 text-[#0F6B58]">{reply.message}</p>
+              <time className="mt-1 block text-[10px] font-semibold text-[#6B7280]">
+                {formatDate(reply.updated_at || reply.created_at)}
+              </time>
+            </div>
+          )}
+
+          {editing && (
+            <div className="mt-2">
+              <ReplyForm
+                reviewId={review.id}
+                existingReply={reply}
+                onSuccess={handleReplySuccess}
+                onCancel={() => setEditing(false)}
+              />
+            </div>
+          )}
+
+          {!reply && !showForm && (
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="mt-2 flex items-center gap-1.5 text-xs font-bold text-[#2F6E9E] transition hover:text-[#265B84]"
+            >
+              <FontAwesomeIcon icon={faReply} className="h-3 w-3" />
+              Repondre
+            </button>
+          )}
+
+          {!reply && showForm && (
+            <ReplyForm
+              reviewId={review.id}
+              existingReply={null}
+              onSuccess={handleReplySuccess}
+              onCancel={() => setShowForm(false)}
+            />
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function PharmacienAvis() {
   const [data, setData] = useState(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
+    setError("");
     let active = true;
 
     getPharmacienAvis()
       .then((response) => {
-        if (active) {
-          setData(response);
-        }
+        if (active) setData(response);
       })
       .catch((err) => {
-        if (active) {
-          setError(getErrorMessage(err));
-        }
+        if (active) setError(getErrorMessage(err));
       })
       .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       });
 
     return () => {
       active = false;
     };
-  }, []);
+  };
+
+  useEffect(load, []);
 
   const reviews = useMemo(() => data.results || [], [data.results]);
   const total = data.stats?.total || 0;
@@ -156,7 +355,7 @@ function PharmacienAvis() {
     <DashboardLayout
       title="Avis clients"
       links={pharmacistLinks}
-      headerSubtitle="Consultez les notes et commentaires recus par votre pharmacie."
+      headerSubtitle="Consultez les notes, commentaires et repondez aux avis de votre pharmacie."
     >
       <div className="mx-auto max-w-7xl space-y-3">
         {loading ? (
@@ -240,30 +439,11 @@ function PharmacienAvis() {
                       )}
 
                       {paginatedReviews.map((review) => (
-                        <article
+                        <ReviewItem
                           key={review.id}
-                          className="rounded-xl border border-[#E2E8F2] px-3 py-2.5 transition hover:border-[#2F6E9E]/25 hover:bg-[#F8FAFC]"
-                        >
-                          <div className="flex items-start gap-3">
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2F6E9E]/10 text-xs font-black text-[#2F6E9E]">
-                              {getUserInitials(review.user_username)}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="text-sm font-bold text-[#1C2B4A]">
-                                  {review.user_username || "Client"}
-                                </p>
-                                <StarRating value={Number(review.note || 0)} />
-                              </div>
-                              <p className="mt-1 text-sm leading-5 text-[#4B5563]">
-                                {review.commentaire || "Aucun commentaire."}
-                              </p>
-                              <time className="mt-1 block text-[11px] font-semibold text-[#6B7280]">
-                                {formatDate(review.date)}
-                              </time>
-                            </div>
-                          </div>
-                        </article>
+                          review={review}
+                          onReplyChanged={load}
+                        />
                       ))}
                     </div>
 

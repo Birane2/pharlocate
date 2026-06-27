@@ -57,6 +57,8 @@ urlpatterns = [
     path('api/horaires/', include('pharmacies.horaire_urls')),
     path('api/avis/', include('reviews.urls')),
     path('api/pharmacien/avis/', include('reviews.pharmacien_urls')),
+    path('api/pharmacien/replies/', include('reviews.pharmacien_reply_urls')),
+    path('api/admin/avis/', include('reviews.admin_review_urls')),
     path('api/medicaments/', include('medicaments.urls')),
     path('api/stocks/', include('medicaments.stock_urls')),
     path('api/pharmacien/stocks/', include('medicaments.pharmacien_urls')),

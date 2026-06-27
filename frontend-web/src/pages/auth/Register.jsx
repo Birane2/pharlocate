@@ -14,6 +14,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import Logo from "../../components/ui/Logo";
 import { getApiErrorMessage } from "../../utils/apiError";
+import { sanitizePhone, validatePhone } from "../../utils/phoneValidation";
 
 function getRegisterError(error) {
   return getApiErrorMessage(
@@ -104,6 +105,7 @@ function Register() {
     role: "utilisateur",
   });
   const [error, setError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [loading, setLoading] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -115,7 +117,14 @@ function Register() {
   );
 
   const handleChange = (event) => {
-    setForm({ ...form, [event.target.name]: event.target.value });
+    const { name, value } = event.target;
+    if (name === "phone_number") {
+      const clean = sanitizePhone(value);
+      setForm({ ...form, phone_number: clean });
+      setPhoneError(validatePhone(clean) || "");
+    } else {
+      setForm({ ...form, [name]: value });
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -124,6 +133,12 @@ function Register() {
 
     if (!acceptedTerms) {
       setError("Veuillez accepter les conditions d'utilisation.");
+      return;
+    }
+
+    const phoneErr = validatePhone(form.phone_number);
+    if (phoneErr) {
+      setPhoneError(phoneErr);
       return;
     }
 
@@ -181,16 +196,28 @@ function Register() {
               required
             />
 
-            <AuthField
-              label="Numéro de téléphone"
-              icon={faPhone}
-              name="phone_number"
-              type="tel"
-              placeholder="+22233613535"
-              value={form.phone_number}
-              onChange={handleChange}
-              required
-            />
+            <div>
+              <AuthField
+                label="Numéro de téléphone"
+                icon={faPhone}
+                name="phone_number"
+                type="tel"
+                inputMode="numeric"
+                placeholder="22345678"
+                value={form.phone_number}
+                onChange={handleChange}
+                maxLength={8}
+                required
+              />
+              {phoneError && (
+                <p className="mt-1 text-xs font-semibold text-[#DC2626]">
+                  {phoneError}
+                </p>
+              )}
+              <p className="mt-1 text-xs font-medium text-[#6B7280]">
+                8 chiffres · commence par 2, 3 ou 4
+              </p>
+            </div>
 
             <AuthField
               label="E-mail"
@@ -329,7 +356,7 @@ function Register() {
 
           <button
             type="submit"
-            disabled={loading || !acceptedTerms}
+            disabled={loading || !acceptedTerms || !!validatePhone(form.phone_number)}
             className="flex h-12 w-full items-center justify-center rounded-xl bg-[#2F6E9E] text-sm font-bold text-white shadow-lg shadow-[#2F6E9E]/20 transition hover:bg-[#265B84] focus:outline-none focus:ring-4 focus:ring-[#2F6E9E]/20 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? "Création..." : "Créer mon compte"}

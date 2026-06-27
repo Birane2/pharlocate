@@ -21,16 +21,34 @@ def normalize_phone_number(phone_number):
 
 
 def validate_mauritanian_phone(phone_number):
-    value = normalize_phone_number(phone_number)
-    if not value:
-        raise serializers.ValidationError('Le numero de telephone est obligatoire.')
+    raw = (phone_number or '').strip().replace(' ', '')
 
-    if not MAURITANIA_PHONE_REGEX.match(value):
+    if not raw:
+        raise serializers.ValidationError('Le numéro de téléphone est obligatoire.')
+
+    # Reject non-digit characters (allow leading + for +222 format)
+    check = raw[1:] if raw.startswith('+') else raw
+    if not check.isdigit():
         raise serializers.ValidationError(
-            'Format de telephone invalide. Exemple: +22233613535.'
+            'Le numéro ne doit contenir que des chiffres.'
         )
 
-    return value
+    value = normalize_phone_number(raw)
+
+    if MAURITANIA_PHONE_REGEX.match(value):
+        return value
+
+    # 8-digit local format but wrong first digit
+    if raw.isdigit() and len(raw) == 8:
+        raise serializers.ValidationError(
+            'Le numéro doit commencer par 2 (Chinguitel), 3 (Mattel) ou 4 (Moov Mauritel).'
+        )
+
+    # Wrong length or any other invalid format
+    raise serializers.ValidationError(
+        'Le numéro doit contenir exactement 8 chiffres commençant par 2, 3 ou 4. '
+        'Exemple : 22345678.'
+    )
 
 
 class PhoneLoginSerializer(serializers.Serializer):
