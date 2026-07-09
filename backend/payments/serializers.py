@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from urllib.parse import quote
 
 from .models import Payment, PaymentMethod, PharmacyPaymentMethod
 
@@ -179,6 +180,18 @@ class PaymentSerializer(serializers.ModelSerializer):
         if not delivery:
             return None
 
+        google_maps_url = None
+        if delivery.latitude is not None and delivery.longitude is not None:
+            google_maps_url = (
+                f"https://www.google.com/maps?q={float(delivery.latitude)},"
+                f"{float(delivery.longitude)}"
+            )
+        elif delivery.adresse_livraison:
+            google_maps_url = (
+                "https://www.google.com/maps/search/?api=1&query="
+                f"{quote(delivery.adresse_livraison)}"
+            )
+
         return {
             'id': delivery.id,
             'address': delivery.adresse_livraison,
@@ -186,8 +199,7 @@ class PaymentSerializer(serializers.ModelSerializer):
             'note': delivery.note,
             'fee': delivery.frais_livraison,
             'status': delivery.statut,
-            'latitude': delivery.latitude,
-            'longitude': delivery.longitude,
+            'google_maps_url': google_maps_url,
         }
 
     def validate(self, attrs):

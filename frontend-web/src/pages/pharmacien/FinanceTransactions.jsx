@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import PharmacienLayout from "../../layouts/PharmacienLayout";
+import Pagination from "../../components/common/Pagination";
 import { EmptyState, PageCard, StatCard } from "../finance/FinanceUI";
 import { dateTime, money } from "../finance/financeFormat";
 import {
@@ -7,14 +8,14 @@ import {
   exportPharmacistTransactionsPDF,
   exportPharmacistTransactionsWord,
 } from "../../services/financeService";
-import { getPharmacienTransactions } from "../../services/financeService";
+import { getTransactions } from "../../services/pharmacienTransactionService";
 
 const TYPE_STYLE = {
-  paiement: "bg-blue-50 text-blue-700",
-  commission: "bg-purple-50 text-purple-700",
+  paiement:      "bg-blue-50 text-blue-700",
+  commission:    "bg-purple-50 text-purple-700",
   remboursement: "bg-teal-50 text-teal-700",
-  ajustement: "bg-amber-50 text-amber-700",
-  abonnement: "bg-emerald-50 text-emerald-700",
+  ajustement:    "bg-amber-50 text-amber-700",
+  abonnement:    "bg-emerald-50 text-emerald-700",
 };
 
 function TypeBadge({ type, label }) {
@@ -26,126 +27,93 @@ function TypeBadge({ type, label }) {
 }
 
 function ExportButtons({ params, disabled }) {
-  const [loading, setLoading] = useState(null);
+  const [busy, setBusy] = useState(null);
 
   const handle = async (fn, key) => {
-    setLoading(key);
-    try {
-      await fn(params);
-    } catch {
-      // silently fail — browser will show nothing downloaded
-    } finally {
-      setLoading(null);
-    }
+    setBusy(key);
+    try { await fn(params); }
+    catch { /* silently fail */ }
+    finally { setBusy(null); }
   };
 
   return (
     <div className="flex flex-wrap gap-2">
-      <button
-        type="button"
-        disabled={disabled || loading !== null}
+      <button type="button" disabled={disabled || busy !== null}
         onClick={() => handle(exportPharmacistTransactionsPDF, "pdf")}
-        className="flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-black text-red-700 disabled:opacity-50"
-      >
-        {loading === "pdf" ? "..." : "PDF"}
+        className="flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-black text-red-700 disabled:opacity-50">
+        {busy === "pdf" ? "..." : "PDF"}
       </button>
-      <button
-        type="button"
-        disabled={disabled || loading !== null}
+      <button type="button" disabled={disabled || busy !== null}
         onClick={() => handle(exportPharmacistTransactionsExcel, "excel")}
-        className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 disabled:opacity-50"
-      >
-        {loading === "excel" ? "..." : "Excel"}
+        className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700 disabled:opacity-50">
+        {busy === "excel" ? "..." : "Excel"}
       </button>
-      <button
-        type="button"
-        disabled={disabled || loading !== null}
+      <button type="button" disabled={disabled || busy !== null}
         onClick={() => handle(exportPharmacistTransactionsWord, "word")}
-        className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 disabled:opacity-50"
-      >
-        {loading === "word" ? "..." : "Word"}
+        className="flex items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 disabled:opacity-50">
+        {busy === "word" ? "..." : "Word"}
       </button>
     </div>
   );
 }
 
-function Pagination({ page, totalPages, count, pageSize, onChange }) {
-  if (totalPages <= 1) return null;
-  const start = (page - 1) * pageSize + 1;
-  const end = Math.min(page * pageSize, count);
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#E2E8F2] pt-4">
-      <p className="text-xs font-semibold text-[#6B7280]">
-        {start}–{end} sur {count} transactions
-      </p>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          disabled={page <= 1}
-          onClick={() => onChange(page - 1)}
-          className="rounded-xl border border-[#DDEBF0] px-3 py-1.5 text-sm font-black text-[#2F6E9E] disabled:opacity-40"
-        >
-          ← Précédent
-        </button>
-        <span className="text-sm font-bold text-[#1C2B4A]">
-          Page {page} / {totalPages}
-        </span>
-        <button
-          type="button"
-          disabled={page >= totalPages}
-          onClick={() => onChange(page + 1)}
-          className="rounded-xl border border-[#DDEBF0] px-3 py-1.5 text-sm font-black text-[#2F6E9E] disabled:opacity-40"
-        >
-          Suivant →
-        </button>
-      </div>
-    </div>
-  );
-}
-
-const PAGE_SIZE = 10;
+// ── Page principale ──────────────────────────────────────────────────────────
 
 function FinanceTransactions() {
-  const [data, setData] = useState({ count: 0, total_pages: 1, page: 1, results: [] });
-  const [search, setSearch] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [transactions, setTransactions] = useState([]);
+  const [totalCount, setTotalCount]     = useState(0);
+  const [currentPage, setCurrentPage]   = useState(1);
+  const [totalPages, setTotalPages]     = useState(1);
+  const [search, setSearch]             = useState("");
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState("");
 
-  const params = useMemo(
-    () => ({ page: currentPage, page_size: PAGE_SIZE, ...(search.trim() ? { search: search.trim() } : {}) }),
-    [currentPage, search]
+  // Les paramètres passés aux exports doivent refléter la recherche active
+  const exportParams = useMemo(
+    () => ({ ...(search.trim() ? { search: search.trim() } : {}) }),
+    [search]
   );
+
+  // ── Chargement ────────────────────────────────────────────────────────────
 
   useEffect(() => {
     let ignore = false;
     setLoading(true);
     setError("");
-    getPharmacienTransactions(params)
-      .then((d) => { if (!ignore) setData(d || {}); })
+
+    getTransactions({ page: currentPage, search })
+      .then((data) => {
+        if (!ignore) {
+          setTransactions(data.results || []);
+          setTotalPages(data.total_pages || 1);
+          setTotalCount(data.count || 0);
+        }
+      })
       .catch((err) => {
         if (!ignore)
           setError(err.response?.data?.error || err.response?.data?.detail || "Impossible de charger les transactions.");
       })
       .finally(() => { if (!ignore) setLoading(false); });
-    return () => { ignore = true; };
-  }, [params]);
 
+    return () => { ignore = true; };
+  }, [currentPage, search]);
+
+  // Reset page on search
   const handleSearch = (value) => {
     setSearch(value);
     setCurrentPage(1);
   };
 
-  const transactions = data.results || [];
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <PharmacienLayout title="Transactions" headerSubtitle="Historique financier de votre pharmacie">
       <div className="space-y-4">
-        {/* Summary cards */}
+
+        {/* Résumé */}
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Total" value={data.count ?? 0} hint="Transactions enregistrées" />
-          <StatCard label="Page affichée" value={transactions.length} hint={`Page ${data.page ?? 1} / ${data.total_pages ?? 1}`} />
+          <StatCard label="Total" value={totalCount} hint="Transactions enregistrées" />
+          <StatCard label="Page affichée" value={transactions.length} hint={`Page ${currentPage} / ${totalPages}`} />
           <StatCard
             label="Total brut (page)"
             value={money(transactions.reduce((s, t) => s + Number(t.montant_brut || 0), 0))}
@@ -158,7 +126,7 @@ function FinanceTransactions() {
           />
         </section>
 
-        {/* Toolbar */}
+        {/* Barre d'outils */}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#E2E8F2] bg-white px-4 py-3 shadow-sm">
           <input
             value={search}
@@ -168,11 +136,11 @@ function FinanceTransactions() {
           />
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-xs font-black uppercase tracking-wide text-[#6B7280]">Télécharger :</span>
-            <ExportButtons params={params} disabled={loading} />
+            <ExportButtons params={exportParams} disabled={loading} />
           </div>
         </div>
 
-        {/* Table */}
+        {/* Tableau */}
         <PageCard title="Historique des transactions">
           {error && (
             <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{error}</div>
@@ -224,15 +192,11 @@ function FinanceTransactions() {
                 </table>
               </div>
 
-              <div className="mt-4">
-                <Pagination
-                  page={data.page ?? 1}
-                  totalPages={data.total_pages ?? 1}
-                  count={data.count ?? 0}
-                  pageSize={PAGE_SIZE}
-                  onChange={(p) => setCurrentPage(p)}
-                />
-              </div>
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+              />
             </>
           )}
         </PageCard>

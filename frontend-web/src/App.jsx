@@ -1,6 +1,7 @@
 import { Navigate, Routes, Route } from "react-router-dom";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
+import PharmacienRegister from "./pages/auth/PharmacienRegister";
 import VerifyOtp from "./pages/auth/VerifyOtp";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import VerifyResetOtp from "./pages/auth/VerifyResetOtp";
@@ -16,6 +17,10 @@ import PharmacieProfile from "./pages/pharmacien/PharmacieProfile";
 import HorairesList from "./pages/pharmacien/HorairesList";
 import PharmacienStocks from "./pages/pharmacien/PharmacienStocks";
 import ReservationsList from "./pages/pharmacien/ReservationsList";
+import PharmacienReservations from "./pages/pharmacien/PharmacienReservations";
+import PharmacienReservationDetail from "./pages/pharmacien/PharmacienReservationDetail";
+import PharmacienDeliveries from "./pages/pharmacien/PharmacienDeliveries";
+import PharmacienDeliveryDetail from "./pages/pharmacien/PharmacienDeliveryDetail";
 import StockCreate from "./pages/pharmacien/StockCreate";
 import PharmacienAvis from "./pages/pharmacien/PharmacienAvis";
 import Home from "./pages/public/Home";
@@ -47,10 +52,15 @@ import AdminSubscriptionRefunds from "./pages/admin/AdminSubscriptionRefunds";
 import AdminTransactions from "./pages/admin/AdminTransactions";
 import AdminCommissionInvoices from "./pages/admin/AdminCommissionInvoices";
 import AdminCommissionInvoiceDetail from "./pages/admin/AdminCommissionInvoiceDetail";
+import AdminReservations from "./pages/admin/AdminReservations";
+import AdminReservationDetail from "./pages/admin/AdminReservationDetail";
+import AdminDeliveries from "./pages/admin/AdminDeliveries";
+import AdminDeliveryDetail from "./pages/admin/AdminDeliveryDetail";
 import CommissionInvoices from "./pages/pharmacien/CommissionInvoices";
 import CommissionInvoiceDetail from "./pages/pharmacien/CommissionInvoiceDetail";
 import PharmacienNotifications from "./pages/pharmacien/PharmacienNotifications";
 import AdminNotifications from "./pages/admin/AdminNotifications";
+import CompletePharmacyProfile from "./pages/pharmacien/CompletePharmacyProfile";
 
 function App() {
   return (
@@ -80,10 +90,20 @@ function App() {
 
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/register/pharmacien" element={<PharmacienRegister />} />
       <Route path="/verify-otp" element={<VerifyOtp />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password/verify" element={<VerifyResetOtp />} />
       <Route path="/reset-password/new" element={<ResetPassword />} />
+
+      <Route
+        path="/pharmacien/complete-profile"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <CompletePharmacyProfile />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/reservations/new/:pharmacyId"
@@ -291,7 +311,18 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["pharmacien"]}>
             <PharmacistPharmacyGate>
-              <ReservationsList />
+              <PharmacienReservations />
+            </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/pharmacien/reservations/:id"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <PharmacienReservationDetail />
             </PharmacistPharmacyGate>
           </ProtectedRoute>
         }
@@ -368,7 +399,18 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["pharmacien"]}>
             <PharmacistPharmacyGate>
-              <Deliveries />
+              <PharmacienDeliveries />
+            </PharmacistPharmacyGate>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/pharmacien/deliveries/:id"
+        element={
+          <ProtectedRoute allowedRoles={["pharmacien"]}>
+            <PharmacistPharmacyGate>
+              <PharmacienDeliveryDetail />
             </PharmacistPharmacyGate>
           </ProtectedRoute>
         }
@@ -500,6 +542,42 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
             <AdminCommissionInvoices />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin — Reservations */}
+      <Route
+        path="/admin/reservations"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminReservations />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/reservations/:id"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminReservationDetail />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Admin — Deliveries */}
+      <Route
+        path="/admin/deliveries"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminDeliveries />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/deliveries/:id"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <AdminDeliveryDetail />
           </ProtectedRoute>
         }
       />

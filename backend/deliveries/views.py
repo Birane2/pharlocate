@@ -1,6 +1,7 @@
 import logging
 
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -8,6 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from notifications_app.models import Notification
+from common.pagination import paginate_response
 from reservations.models import Reservation
 
 from .models import Delivery
@@ -253,6 +255,37 @@ def pharmacist_deliveries(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def pharmacist_delivery_stats(request):
+    """
+    GET /api/pharmacien/deliveries/stats/
+    Retourne les compteurs par statut pour le tableau de bord pharmacien.
+    """
+    if not is_pharmacist(request.user):
+        return Response(
+            {'error': 'Acces reserve aux pharmaciens.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    from django.db.models import Count
+
+    deliveries = Delivery.objects.filter(pharmacy__user=request.user)
+    total = deliveries.count()
+    counts = {
+        c['statut']: c['count']
+        for c in deliveries.values('statut').annotate(count=Count('id'))
+    }
+
+    return Response({
+        'total': total,
+        'en_attente': counts.get(Delivery.STATUS_PENDING, 0),
+        'en_cours': counts.get(Delivery.STATUS_IN_PROGRESS, 0),
+        'livree': counts.get(Delivery.STATUS_DELIVERED, 0),
+        'annulee': counts.get(Delivery.STATUS_CANCELLED, 0),
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def pharmacist_delivery_list(request):
     if not is_pharmacist(request.user):
         return Response(
@@ -260,11 +293,28 @@ def pharmacist_delivery_list(request):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    serializer = PharmacistDeliverySerializer(
-        get_pharmacist_delivery_queryset(request.user),
-        many=True,
+    deliveries = get_pharmacist_delivery_queryset(request.user)
+
+    delivery_status = (
+        request.query_params.get('status')
+        or request.query_params.get('statut')
+        or request.query_params.get('delivery_status')
     )
-    return Response(serializer.data, status=status.HTTP_200_OK)
+    if delivery_status:
+        deliveries = deliveries.filter(statut=delivery_status)
+
+    search = (request.query_params.get('search') or '').strip()
+    if search:
+        deliveries = deliveries.filter(
+            Q(telephone__icontains=search)
+            | Q(adresse_livraison__icontains=search)
+            | Q(user__first_name__icontains=search)
+            | Q(user__last_name__icontains=search)
+            | Q(user__phone_number__icontains=search)
+            | Q(reservation__id__icontains=search)
+        )
+
+    return paginate_response(deliveries, request, PharmacistDeliverySerializer)
 
 
 @api_view(['GET'])

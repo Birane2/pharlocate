@@ -4,18 +4,13 @@ import API from "../api/axios";
 
 const AuthContext = createContext(null);
 
+// Decode JWT exp field — works for both access and refresh tokens
 function isJwtExpired(token) {
-  if (!token) {
-    return true;
-  }
-
+  if (!token) return true;
   try {
-    const encodedPayload = token
-      .split(".")[1]
-      .replace(/-/g, "+")
-      .replace(/_/g, "/");
-    const padding = "=".repeat((4 - (encodedPayload.length % 4)) % 4);
-    const payload = JSON.parse(atob(encodedPayload + padding));
+    const encoded = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padding = "=".repeat((4 - (encoded.length % 4)) % 4);
+    const payload = JSON.parse(atob(encoded + padding));
     return !payload.exp || payload.exp * 1000 <= Date.now();
   } catch {
     return true;
@@ -29,16 +24,20 @@ function clearStoredSession() {
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(() => {
-    const token = localStorage.getItem("access_token");
-
-    if (isJwtExpired(token)) {
-      clearStoredSession();
-      return false;
+  // Preload user immediately from storage — avoids flash of unauthenticated UI
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem("user");
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
     }
+  });
 
-    return true;
+  // Show loading only when a valid refresh token exists (access_token may be expired)
+  const [loading, setLoading] = useState(() => {
+    const refreshToken = localStorage.getItem("refresh_token");
+    return !!refreshToken && !isJwtExpired(refreshToken);
   });
 
   const getProfile = async () => {
@@ -57,18 +56,21 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
+    const refreshToken = localStorage.getItem("refresh_token");
 
-    if (!token || isJwtExpired(token)) {
+    // No refresh token, or refresh token is itself expired → full logout
+    if (!refreshToken || isJwtExpired(refreshToken)) {
       clearStoredSession();
+      setUser(null);
+      setLoading(false);
       return;
     }
 
-    const run = async () => {
-      await getProfile();
-    };
-
-    run();
+    // Refresh token is valid → fetch profile.
+    // If the access_token is also expired, the axios interceptor transparently
+    // exchanges the refresh_token for a new access_token before the request lands.
+    getProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = async (phoneNumber, password) => {
@@ -92,14 +94,8 @@ export function AuthProvider({ children }) {
   };
 
   const persistAuthPayload = (data) => {
-    if (data?.access) {
-      localStorage.setItem("access_token", data.access);
-    }
-
-    if (data?.refresh) {
-      localStorage.setItem("refresh_token", data.refresh);
-    }
-
+    if (data?.access) localStorage.setItem("access_token", data.access);
+    if (data?.refresh) localStorage.setItem("refresh_token", data.refresh);
     if (data?.user) {
       localStorage.setItem("user", JSON.stringify(data.user));
       setUser(data.user);
@@ -107,18 +103,13 @@ export function AuthProvider({ children }) {
   };
 
   const verifyEmailOtp = async (email, otp) => {
-    const res = await API.post("/api/auth/verify-email-otp/", {
-      email,
-      otp,
-    });
+    const res = await API.post("/api/auth/verify-email-otp/", { email, otp });
     persistAuthPayload(res.data);
     return res.data;
   };
 
   const resendEmailOtp = async (email) => {
-    const res = await API.post("/api/auth/resend-email-otp/", {
-      email,
-    });
+    const res = await API.post("/api/auth/resend-email-otp/", { email });
     return res.data;
   };
 

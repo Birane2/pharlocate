@@ -50,7 +50,7 @@ export async function getPharmacienFinanceDashboard(params = {}) {
 }
 
 export async function getPharmacienTransactions(params = {}) {
-  const response = await API.get("/api/pharmacien/finance/transactions/", { params });
+  const response = await API.get("/api/pharmacien/transactions/", { params });
   // Returns paginated object: { count, total_pages, page, page_size, results }
   return response.data;
 }
@@ -63,6 +63,11 @@ export async function getPharmacienPayments(params = {}) {
 export async function getPharmacienOrders(params = {}) {
   const response = await API.get("/api/pharmacien/orders/", { params });
   return normalizeList(response.data);
+}
+
+export async function getPharmacienOrdersPage(params = {}) {
+  const response = await API.get("/api/pharmacien/payments/", { params });
+  return response.data;
 }
 
 export async function getPharmacienOrderDetail(id) {

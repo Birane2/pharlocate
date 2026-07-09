@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 import os
 
@@ -20,11 +21,12 @@ except ImportError:
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+ENV_FILE = BASE_DIR / '.env'
 
 if load_dotenv:
-    load_dotenv(BASE_DIR / '.env')
+    load_dotenv(ENV_FILE)
 else:
-    env_path = BASE_DIR / '.env'
+    env_path = ENV_FILE
     if env_path.exists():
         for line in env_path.read_text(encoding='utf-8').splitlines():
             normalized = line.strip()
@@ -100,8 +102,8 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.AllowAny',
     ),
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 3,
+    'DEFAULT_PAGINATION_CLASS': 'config.pagination.StandardResultsSetPagination',
+    'PAGE_SIZE': 10,
     'EXCEPTION_HANDLER': 'config.exception_handlers.api_exception_handler',
 
     'DEFAULT_PARSER_CLASSES': [
@@ -203,31 +205,44 @@ MANUAL_PAYMENT_COMMISSION_RATE = os.getenv(
     '0.00',
 )
 
-OTP_DEBUG_PRINT = os.getenv('OTP_DEBUG_PRINT', 'True').lower() in {
+OTP_DEBUG_PRINT = os.getenv('OTP_DEBUG_PRINT', 'False').lower() in {
     '1',
     'true',
     'yes',
     'on',
 }
 
-EMAIL_HOST = 'smtp.gmail.com'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'gangueoumar075@gmail.com')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', 'zhlstcwoapaxfrkl').replace(' ', '')
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in {
+    '1',
+    'true',
+    'yes',
+    'on',
+}
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False').lower() in {
+    '1',
+    'true',
+    'yes',
+    'on',
+}
+EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '20'))
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '').strip()
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '').strip().replace(' ', '')
 DEFAULT_FROM_EMAIL = os.getenv(
     'DEFAULT_FROM_EMAIL',
     f'PharmaLocate <{EMAIL_HOST_USER}>' if EMAIL_HOST_USER else 'PharmaLocate',
 )
 
-_EMAIL_PASSWORD_PLACEHOLDER ='zhlstcwoapaxfrkl'
+_EMAIL_PASSWORD_PLACEHOLDERS = {
+    '',
+    'mot_de_passe_application_gmail',
+    'abcdefghijklmnop',
+    'abcd efgh ijkl mnop'.replace(' ', ''),
+}
 
 # EMAIL_BACKEND_MODE: smtp | console | dummy
 _email_backend_env = os.getenv('EMAIL_BACKEND_MODE', 'smtp').lower()
-
-# Bascule automatique en console si le placeholder n'a pas été remplacé
-if EMAIL_HOST_PASSWORD == _EMAIL_PASSWORD_PLACEHOLDER:
-    _email_backend_env = 'console'
 
 if _email_backend_env == 'console':
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
@@ -236,24 +251,21 @@ elif _email_backend_env == 'dummy':
 else:
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
-# Startup diagnostics
-print('EMAIL_HOST_USER    =', EMAIL_HOST_USER or 'MANQUANT')
-print(
-    'EMAIL_HOST_PASSWORD=',
-    f'present ({len(EMAIL_HOST_PASSWORD)} chars)' if EMAIL_HOST_PASSWORD and EMAIL_HOST_PASSWORD != _EMAIL_PASSWORD_PLACEHOLDER else 'NON CONFIGURE (placeholder)',
+EMAIL_CONFIGURED = bool(
+    EMAIL_HOST_USER
+    and EMAIL_HOST_PASSWORD
+    and EMAIL_HOST_PASSWORD not in _EMAIL_PASSWORD_PLACEHOLDERS
 )
-print('EMAIL_BACKEND      =', EMAIL_BACKEND)
-print('OTP_DEBUG_PRINT    =', OTP_DEBUG_PRINT)
 
-if EMAIL_HOST_PASSWORD == _EMAIL_PASSWORD_PLACEHOLDER or not EMAIL_HOST_PASSWORD:
-    print()
-    print('!' * 60)
-    print('ATTENTION : Gmail SMTP non configure !')
-    print('  Les OTPs seront affiches dans ce terminal uniquement.')
-    print('  Pour envoyer les emails par Gmail :')
-    print('  1. myaccount.google.com -> Securite -> Validation 2 etapes')
-    print('  2. Mots de passe des applications -> Creer -> PharmaLocate')
-    print('  3. Mettre le code 16 chars dans .env EMAIL_HOST_PASSWORD=')
-    print('  4. Garder EMAIL_BACKEND_MODE=smtp dans .env')
-    print('!' * 60)
-    print()
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=25),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': False,  # rest_framework_simplejwt.token_blacklist not installed
+    'UPDATE_LAST_LOGIN': True,
+    'ALGORITHM': 'HS256',
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
+}

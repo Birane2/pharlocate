@@ -123,6 +123,18 @@ export const adminLinks = [
     icon: faClinicMedical,
   },
   {
+    label: "Réservations",
+    shortLabel: "Réserv.",
+    path: "/admin/reservations",
+    icon: faCalendarCheck,
+  },
+  {
+    label: "Livraisons",
+    shortLabel: "Livr.",
+    path: "/admin/deliveries",
+    icon: faTruckFast,
+  },
+  {
     label: "Profil",
     shortLabel: "Profil",
     path: "/admin/profil",

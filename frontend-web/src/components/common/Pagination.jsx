@@ -1,99 +1,106 @@
-import Button from "../ui/Button";
+/**
+ * Composant Pagination PharmaLocate.
+ *
+ * Props :
+ *   currentPage  — numéro de la page active (nombre, commence à 1)
+ *   totalPages   — nombre total de pages
+ *   onPageChange — callback appelé avec le nouveau numéro de page
+ *
+ * Comportement :
+ *   - Affiche "Page X sur Y"
+ *   - Desktop / tablette : ← Précédent | 1 2 3 4 5 | Suivant →
+ *   - Mobile : ← Précédent | page active | Suivant →
+ *   - Disparaît si totalPages ≤ 1
+ */
 
-function buildVisiblePages(currentPage, totalPages) {
-  const pages = [];
-  const start = Math.max(1, currentPage - 1);
-  const end = Math.min(totalPages, currentPage + 1);
-
-  if (start > 1) {
-    pages.push(1);
-  }
-
-  if (start > 2) {
-    pages.push("ellipsis-start");
-  }
-
-  for (let pageNumber = start; pageNumber <= end; pageNumber += 1) {
-    pages.push(pageNumber);
-  }
-
-  if (end < totalPages - 1) {
-    pages.push("ellipsis-end");
-  }
-
-  if (end < totalPages) {
-    pages.push(totalPages);
-  }
-
-  return pages;
+function buildPageNumbers(current, total) {
+  const MAX = 5;
+  const safeTotal = Math.max(total || 1, 1);
+  const safeCurrent = Math.min(Math.max(current || 1, 1), safeTotal);
+  const half = Math.floor(MAX / 2);
+  let start = Math.max(1, safeCurrent - half);
+  const end = Math.min(safeTotal, start + MAX - 1);
+  start = Math.max(1, end - MAX + 1);
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i);
 }
 
-function Pagination({ page, totalPages, previous, next, loading, onPageChange }) {
-  if (totalPages <= 1) {
-    return null;
-  }
+export default function Pagination({ currentPage = 1, totalPages = 1, onPageChange }) {
+  const safeTotal = Math.max(totalPages || 1, 1);
+  const safePage = Math.min(Math.max(currentPage || 1, 1), safeTotal);
 
-  const visiblePages = buildVisiblePages(page, totalPages);
+  if (safeTotal <= 1) return null;
+
+  const hasNext = safePage < safeTotal;
+  const hasPrev = safePage > 1;
+  const pages = buildPageNumbers(safePage, safeTotal);
+
+  const go = (target) => {
+    if (!onPageChange) return;
+    const clamped = Math.min(Math.max(target, 1), safeTotal);
+    if (clamped !== safePage) onPageChange(clamped);
+  };
 
   return (
-    <div className="flex flex-col gap-4 rounded-[1.5rem] border border-[#2F6E9E]/10 bg-white/90 px-4 py-4 shadow-[0_16px_36px_rgba(47,110,158,0.08)] sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-sm font-medium text-pharmaTextLight">
-        Page <span className="font-bold text-pharmaText">{page}</span> sur{" "}
-        <span className="font-bold text-pharmaText">{totalPages}</span>
+    <div className="flex flex-col items-center gap-3 border-t border-slate-100 px-4 py-4 sm:flex-row sm:justify-between">
+      {/* Résumé — "Page X sur Y" */}
+      <p className="text-xs font-semibold text-slate-500">
+        Page{" "}
+        <span className="font-black text-[#1C2B4A]">{safePage}</span>
+        {" "}sur{" "}
+        <span className="font-black text-[#1C2B4A]">{safeTotal}</span>
       </p>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!previous || loading}
-          onClick={() => onPageChange(page - 1)}
-        >
-          Precedent
-        </Button>
+      {/* Navigation */}
+      <div className="flex items-center gap-1.5">
+        <PageBtn
+          label="← Précédent"
+          disabled={!hasPrev}
+          onClick={() => go(safePage - 1)}
+        />
 
-        {visiblePages.map((item) => {
-          if (typeof item !== "number") {
-            return (
-              <span
-                key={item}
-                className="px-2 text-sm font-semibold text-[#6B7A99]"
-              >
-                ...
-              </span>
-            );
-          }
+        {/* Numéros de page — masqués sur mobile sauf la page active */}
+        {pages.map((n) => (
+          <span
+            key={n}
+            className={n === safePage ? "inline-flex" : "hidden sm:inline-flex"}
+          >
+            <PageBtn
+              label={n}
+              active={n === safePage}
+              onClick={() => go(n)}
+            />
+          </span>
+        ))}
 
-          const isActive = item === page;
-
-          return (
-            <button
-              key={item}
-              type="button"
-              disabled={loading}
-              onClick={() => onPageChange(item)}
-              className={`min-w-10 rounded-2xl px-3 py-2 text-sm font-bold transition ${
-                isActive
-                  ? "bg-[#2F6E9E] text-white shadow-sm"
-                  : "border border-[#E2E8F2] bg-white text-[#1C2B4A] hover:border-[#2F6E9E] hover:text-[#2F6E9E]"
-              } disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              {item}
-            </button>
-          );
-        })}
-
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!next || loading}
-          onClick={() => onPageChange(page + 1)}
-        >
-          Suivant
-        </Button>
+        <PageBtn
+          label="Suivant →"
+          disabled={!hasNext}
+          onClick={() => go(safePage + 1)}
+        />
       </div>
     </div>
   );
 }
 
-export default Pagination;
+function PageBtn({ label, active = false, disabled = false, onClick }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled || active}
+      onClick={onClick}
+      className={[
+        "inline-flex h-9 min-w-[2.25rem] items-center justify-center rounded-lg px-3",
+        "text-xs font-bold shadow-sm transition-all duration-150",
+        active
+          ? "bg-[#2F6E9E] text-white cursor-default shadow-md"
+          : disabled
+            ? "border border-slate-200 bg-white text-slate-400 cursor-not-allowed opacity-40"
+            : "border border-slate-200 bg-white text-slate-600 hover:border-[#2F6E9E] hover:text-[#2F6E9E]",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {label}
+    </button>
+  );
+}

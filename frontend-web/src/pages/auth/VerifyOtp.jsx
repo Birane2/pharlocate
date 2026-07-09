@@ -58,7 +58,11 @@ function VerifyOtp() {
 
   const redirectByRole = (user) => {
     if (user?.role === "pharmacien") {
-      navigate("/pharmacien/dashboard");
+      if (user?.has_pharmacy === false) {
+        navigate("/pharmacien/complete-profile");
+      } else {
+        navigate("/pharmacien/dashboard");
+      }
     } else if (user?.role === "admin") {
       navigate("/admin/dashboard");
     } else {

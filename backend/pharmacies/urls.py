@@ -8,6 +8,7 @@ from .views import (
     PharmacienPharmacyProfileView,
     PharmacyDetailView,
     PharmacyListCreateView,
+    PharmacyLocationView,
 )
 
 urlpatterns = [
@@ -21,4 +22,5 @@ urlpatterns = [
         name='pharmacy_payment_methods',
     ),
     path('<int:pk>/', PharmacyDetailView.as_view(), name='pharmacy_detail'),
+    path('<int:pk>/location/', PharmacyLocationView.as_view(), name='pharmacy_location'),
 ]

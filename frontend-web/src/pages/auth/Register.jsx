@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
+  faArrowRight,
+  faCircleCheck,
   faCircleExclamation,
   faEnvelope,
   faEye,
@@ -9,12 +11,14 @@ import {
   faLock,
   faPhone,
   faUser,
-  faUserTag,
+  faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAuth } from "../../context/AuthContext";
 import Logo from "../../components/ui/Logo";
 import { getApiErrorMessage } from "../../utils/apiError";
 import { sanitizePhone, validatePhone } from "../../utils/phoneValidation";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getRegisterError(error) {
   return getApiErrorMessage(
@@ -24,98 +28,85 @@ function getRegisterError(error) {
   );
 }
 
-function getPasswordStrength(password) {
-  if (!password) {
-    return {
-      label: "",
-      color: "bg-[#E2E8F2]",
-      textColor: "text-[#6B7280]",
-      width: "w-0",
-    };
-  }
+const PASSWORD_RULES = [
+  { id: "len",     label: "8 caractères min.",  test: (p) => p.length >= 8 },
+  { id: "case",    label: "Majuscule & minusc.", test: (p) => /[A-Z]/.test(p) && /[a-z]/.test(p) },
+  { id: "digit",   label: "Un chiffre",          test: (p) => /\d/.test(p) },
+  { id: "special", label: "Caractère spécial",   test: (p) => /[^A-Za-z0-9]/.test(p) },
+];
 
-  let score = 0;
-  if (password.length >= 8) score += 1;
-  if (/[A-Z]/.test(password) && /[a-z]/.test(password)) score += 1;
-  if (/\d/.test(password)) score += 1;
-  if (/[^A-Za-z0-9]/.test(password)) score += 1;
-
-  if (score <= 1) {
-    return {
-      label: "Faible",
-      color: "bg-[#EF4444]",
-      textColor: "text-[#DC2626]",
-      width: "w-1/3",
-    };
-  }
-
-  if (score <= 3) {
-    return {
-      label: "Moyen",
-      color: "bg-[#F59E0B]",
-      textColor: "text-[#D97706]",
-      width: "w-2/3",
-    };
-  }
-
-  return {
-    label: "Fort",
-    color: "bg-[#22C55E]",
-    textColor: "text-[#16A34A]",
-    width: "w-full",
-  };
-}
+const COMMON_PASSWORDS = new Set([
+  "password", "password123", "12345678", "123456789", "azerty123", "qwerty123",
+]);
 
 function validatePassword(password) {
-  const commonPasswords = new Set([
-    "password",
-    "password123",
-    "12345678",
-    "123456789",
-    "azerty123",
-    "qwerty123",
-  ]);
-  const normalized = password.trim().toLowerCase();
-
   if (!password) return "Mot de passe obligatoire.";
-  if (password.length < 8) return "Minimum 8 caracteres.";
-  if (commonPasswords.has(normalized)) {
-    return "Mot de passe trop courant. Choisissez un mot de passe plus securise.";
-  }
-  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password)) {
-    return "Ajoutez au moins une majuscule et une minuscule.";
-  }
-  if (!/\d/.test(password)) return "Ajoutez au moins un chiffre.";
-  if (!/[^A-Za-z0-9]/.test(password)) {
-    return "Ajoutez au moins un caractere special.";
+  if (COMMON_PASSWORDS.has(password.trim().toLowerCase()))
+    return "Mot de passe trop courant.";
+  for (const rule of PASSWORD_RULES) {
+    if (!rule.test(password)) return rule.label + " requis.";
   }
   return "";
 }
 
-function AuthField({
-  label,
-  icon,
-  rightAction,
-  className = "",
-  inputClassName = "",
-  ...props
-}) {
+function getStrength(password) {
+  return PASSWORD_RULES.filter((r) => r.test(password)).length;
+}
+
+const STRENGTH_META = [
+  null,
+  { label: "Très faible", bar: "w-1/4", color: "bg-red-500",    text: "text-red-600" },
+  { label: "Faible",      bar: "w-2/4", color: "bg-orange-400", text: "text-orange-600" },
+  { label: "Moyen",       bar: "w-3/4", color: "bg-amber-400",  text: "text-amber-600" },
+  { label: "Fort",        bar: "w-full",color: "bg-emerald-500",text: "text-emerald-600" },
+];
+
+// ─── Field component ──────────────────────────────────────────────────────────
+
+function Field({ label, icon, hint, error, valid, rightAction, className = "", ...inputProps }) {
+  const ring = error
+    ? "border-red-400 focus-within:border-red-400 focus-within:ring-red-200/60"
+    : valid
+    ? "border-emerald-400 focus-within:border-emerald-400 focus-within:ring-emerald-100"
+    : "border-[#E2E8F2] focus-within:border-[#2F6E9E] focus-within:ring-[#2F6E9E]/10";
+
   return (
     <div className={className}>
-      <label className="mb-1.5 block text-xs font-bold text-[#1C2B4A]">
+      <label className="mb-1.5 block text-xs font-semibold text-[#374151]">
         {label}
       </label>
-      <div className="flex h-12 items-center gap-3 rounded-xl border border-[#E2E8F2] bg-white px-3.5 shadow-sm transition focus-within:border-[#2F6E9E] focus-within:ring-4 focus-within:ring-[#2F6E9E]/10">
-        <FontAwesomeIcon icon={icon} className="h-4 w-4 text-[#2F6E9E]" />
-        <input
-          className={`h-full min-w-0 flex-1 bg-transparent text-sm font-medium text-[#1C2B4A] outline-none placeholder:text-[#9CA3AF] ${inputClassName}`}
-          {...props}
+      <div
+        className={`flex h-11 items-center gap-2.5 rounded-[14px] border bg-white px-3 shadow-sm transition-all focus-within:ring-4 ${ring}`}
+      >
+        <FontAwesomeIcon
+          icon={icon}
+          className={`h-3.5 w-3.5 flex-none transition-colors ${
+            error ? "text-red-400" : valid ? "text-emerald-500" : "text-[#9CA3AF]"
+          }`}
         />
+        <input
+          className="h-full min-w-0 flex-1 bg-transparent text-sm text-[#111827] outline-none placeholder:text-[#C4C9D4]"
+          {...inputProps}
+        />
+        {valid && !rightAction && (
+          <FontAwesomeIcon icon={faCircleCheck} className="h-3.5 w-3.5 flex-none text-emerald-500" />
+        )}
         {rightAction}
       </div>
+      {error && (
+        <p className="mt-1 flex items-center gap-1 text-xs font-medium text-red-600">
+          <FontAwesomeIcon icon={faXmark} className="h-3 w-3" />
+          {error}
+        </p>
+      )}
+      {hint && !error && (
+        <p className="mt-1 text-xs text-[#9CA3AF]">{hint}</p>
+      )}
     </div>
   );
 }
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 function Register() {
   const { register } = useAuth();
@@ -128,288 +119,285 @@ function Register() {
     email: "",
     password: "",
     password_confirm: "",
-    role: "utilisateur",
   });
-  const [error, setError] = useState("");
-  const [phoneError, setPhoneError] = useState("");
+  const [touched, setTouched] = useState({});
+  const [submitError, setSubmitError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  const passwordStrength = useMemo(
-    () => getPasswordStrength(form.password),
+  // ── Derived validation ────────────────────────────────────────────────────
+  const phoneErr    = touched.phone_number ? validatePhone(form.phone_number) || "" : "";
+  const phoneValid  = !!form.phone_number && !validatePhone(form.phone_number);
+
+  const strength     = useMemo(() => getStrength(form.password), [form.password]);
+  const strengthMeta = strength > 0 ? STRENGTH_META[strength] : null;
+
+  const passwordRules = useMemo(
+    () => PASSWORD_RULES.map((r) => ({ ...r, passed: r.test(form.password) })),
     [form.password]
   );
+  const passwordErr   = touched.password && form.password ? validatePassword(form.password) : "";
+  const passwordValid = form.password.length > 0 && !validatePassword(form.password);
 
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-    if (name === "phone_number") {
-      const clean = sanitizePhone(value);
-      setForm({ ...form, phone_number: clean });
-      setPhoneError(validatePhone(clean) || "");
-    } else {
-      setForm({ ...form, [name]: value });
-    }
+  const confirmErr   = touched.password_confirm && form.password_confirm
+    ? form.password_confirm !== form.password ? "Les mots de passe ne correspondent pas." : ""
+    : "";
+  const confirmValid = form.password_confirm.length > 0 && form.password_confirm === form.password;
+
+  const firstNameValid = form.first_name.trim().length >= 2;
+  const lastNameValid  = form.last_name.trim().length >= 2;
+  const emailValid     = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    const cleaned = name === "phone_number" ? sanitizePhone(value) : value;
+    setForm((prev) => ({ ...prev, [name]: cleaned }));
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setError("");
+  const handleBlur = (e) => {
+    setTouched((prev) => ({ ...prev, [e.target.name]: true }));
+  };
 
-    if (!acceptedTerms) {
-      setError("Veuillez accepter les conditions d'utilisation.");
-      return;
-    }
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitError("");
+    setTouched({ first_name: true, last_name: true, phone_number: true, email: true, password: true, password_confirm: true });
 
-    const phoneErr = validatePhone(form.phone_number);
-    if (phoneErr) {
-      setPhoneError(phoneErr);
-      return;
-    }
-
-    const passwordErr = validatePassword(form.password);
-    if (passwordErr) {
-      setError(passwordErr);
-      return;
-    }
-
-    if (form.password !== form.password_confirm) {
-      setError("Les mots de passe ne correspondent pas.");
-      return;
-    }
+    if (validatePhone(form.phone_number))     return;
+    if (validatePassword(form.password))      return;
+    if (form.password !== form.password_confirm) return;
 
     setLoading(true);
-
     try {
-      const response = await register(form);
-      const email = response.email || form.email;
-      navigate(`/verify-otp?email=${encodeURIComponent(email)}`);
+      const res = await register(form);
+      navigate(`/verify-otp?email=${encodeURIComponent(res.email || form.email)}`);
     } catch (err) {
-      setError(getRegisterError(err));
+      setSubmitError(getRegisterError(err));
     } finally {
       setLoading(false);
     }
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#F8FAFC] px-4 py-6 sm:px-6">
-      <div className="pointer-events-none absolute -left-24 top-12 h-72 w-72 rounded-full bg-[#2F6E9E]/10 blur-3xl" />
-      <div className="pointer-events-none absolute -right-24 bottom-10 h-72 w-72 rounded-full bg-[#2FA6A3]/12 blur-3xl" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(94,198,184,0.12),transparent_34%),linear-gradient(135deg,rgba(47,110,158,0.05)_0%,rgba(255,255,255,0.74)_48%,rgba(47,166,163,0.06)_100%)]" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#F1F5F9] px-4 py-8 sm:px-6">
+      {/* Background blobs */}
+      <div className="pointer-events-none absolute -left-32 top-0 h-80 w-80 rounded-full bg-[#2F6E9E]/8 blur-3xl" />
+      <div className="pointer-events-none absolute -right-32 bottom-0 h-80 w-80 rounded-full bg-[#2FA6A3]/10 blur-3xl" />
 
-      <section className="relative w-full max-w-[720px] rounded-2xl border border-[#E2E8F2] bg-white/95 p-5 shadow-[0_20px_60px_rgba(28,43,74,0.10)] backdrop-blur sm:p-6">
+      <section className="relative w-full max-w-[640px] rounded-[22px] border border-[#E2E8F2] bg-white/98 p-6 shadow-[0_16px_56px_rgba(28,43,74,0.10)] backdrop-blur sm:p-8">
+
+        {/* Header */}
         <div className="flex flex-col items-center text-center">
-          <Logo className="h-10" imageClassName="drop-shadow-sm" />
-
-          <h1 className="mt-4 text-2xl font-bold tracking-tight text-[#1C2B4A]">
-            Créer un compte
+          <Logo className="h-9" imageClassName="drop-shadow-sm" />
+          <h1 className="mt-4 text-[1.4rem] font-bold tracking-tight text-[#111827]">
+            Créer votre compte pharmacien
           </h1>
-
-          <p className="mt-1 text-sm font-medium text-[#6B7280]">
-            Accédez à PharmaLocate en quelques secondes.
-          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <AuthField
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="mt-6 space-y-3.5" noValidate>
+
+          {/* Row 1: Names */}
+          <div className="grid grid-cols-2 gap-3">
+            <Field
               label="Prénom"
               icon={faUser}
               name="first_name"
-              placeholder="Oumar"
+              placeholder="prénom"
               value={form.first_name}
+              autoComplete="given-name"
+              valid={firstNameValid}
               onChange={handleChange}
+              onBlur={handleBlur}
               required
             />
-
-            <AuthField
+            <Field
               label="Nom"
               icon={faUser}
               name="last_name"
-              placeholder="Gangué"
+              placeholder="Nom"
               value={form.last_name}
+              autoComplete="family-name"
+              valid={lastNameValid}
               onChange={handleChange}
+              onBlur={handleBlur}
               required
             />
+          </div>
 
-            <div>
-              <AuthField
-                label="Numéro de téléphone"
-                icon={faPhone}
-                name="phone_number"
-                type="tel"
-                inputMode="numeric"
-                placeholder="22345678"
-                value={form.phone_number}
-                onChange={handleChange}
-                maxLength={8}
-                required
-              />
-              {phoneError && (
-                <p className="mt-1 text-xs font-semibold text-[#DC2626]">
-                  {phoneError}
-                </p>
-              )}
-              <p className="mt-1 text-xs font-medium text-[#6B7280]">
-                8 chiffres · commence par 2, 3 ou 4
-              </p>
-            </div>
-
-            <AuthField
-              label="E-mail"
+          {/* Row 2: Contact */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field
+              label="Téléphone"
+              icon={faPhone}
+              name="phone_number"
+              type="tel"
+              inputMode="numeric"
+              placeholder="EX 22345678"
+              value={form.phone_number}
+              autoComplete="tel"
+              maxLength={8}
+              valid={phoneValid}
+              error={phoneErr}
+              hint="8 chiffres · commence par 2, 3 ou 4"
+              onChange={handleChange}
+              onBlur={handleBlur}
+              required
+            />
+            <Field
+              label="Adresse e-mail"
               icon={faEnvelope}
               name="email"
               type="email"
-              placeholder="oumar@gmail.com"
+              placeholder=""
               value={form.email}
+              autoComplete="email"
+              valid={emailValid}
               onChange={handleChange}
+              onBlur={handleBlur}
               required
             />
+          </div>
 
-            <div>
-              <AuthField
-                label="Mot de passe"
-                icon={faLock}
-                name="password"
-                type={showPassword ? "text" : "password"}
-                placeholder="Mot de passe"
-                value={form.password}
-                onChange={handleChange}
-                required
-                rightAction={
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((isVisible) => !isVisible)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[#6B7280] transition hover:bg-[#F8FAFC] hover:text-[#2F6E9E]"
-                    aria-label={
-                      showPassword
-                        ? "Masquer le mot de passe"
-                        : "Afficher le mot de passe"
-                    }
-                  >
-                    <FontAwesomeIcon
-                      icon={showPassword ? faEyeSlash : faEye}
-                      className="h-4 w-4"
-                    />
-                  </button>
-                }
-              />
-
-              <div className="mt-2">
-                <div className="h-1.5 overflow-hidden rounded-full bg-[#E2E8F2]">
-                  <div
-                    className={`h-full rounded-full transition-all ${passwordStrength.width} ${passwordStrength.color}`}
-                  />
-                </div>
-                {passwordStrength.label && (
-                  <p
-                    className={`mt-1 text-xs font-bold ${passwordStrength.textColor}`}
-                  >
-                    Sécurité : {passwordStrength.label}
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <AuthField
-              label="Confirmation du mot de passe"
+          {/* Password */}
+          <div>
+            <Field
+              label="Mot de passe"
               icon={faLock}
-              name="password_confirm"
-              type={showConfirmPassword ? "text" : "password"}
-              placeholder="Confirmer"
-              value={form.password_confirm}
+              name="password"
+              type={showPassword ? "text" : "password"}
+              placeholder="Choisissez un mot de passe "
+              value={form.password}
+              autoComplete="new-password"
+              valid={passwordValid}
+              error={passwordErr}
               onChange={handleChange}
+              onBlur={handleBlur}
               required
               rightAction={
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowConfirmPassword((isVisible) => !isVisible)
-                  }
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-[#6B7280] transition hover:bg-[#F8FAFC] hover:text-[#2F6E9E]"
-                  aria-label={
-                    showConfirmPassword
-                      ? "Masquer la confirmation"
-                      : "Afficher la confirmation"
-                  }
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="flex h-7 w-7 flex-none items-center justify-center rounded-lg text-[#9CA3AF] transition hover:text-[#2F6E9E]"
+                  aria-label={showPassword ? "Masquer" : "Afficher"}
                 >
-                  <FontAwesomeIcon
-                    icon={showConfirmPassword ? faEyeSlash : faEye}
-                    className="h-4 w-4"
-                  />
+                  <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} className="h-3.5 w-3.5" />
                 </button>
               }
             />
+
+            {form.password && (
+              <div className="mt-2 space-y-1.5">
+                {/* Strength bar */}
+                <div className="flex items-center gap-2">
+                  <div className="h-1 flex-1 overflow-hidden rounded-full bg-[#E2E8F2]">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${strengthMeta?.bar ?? "w-0"} ${strengthMeta?.color ?? ""}`}
+                    />
+                  </div>
+                  {strengthMeta && (
+                    <span className={`text-[10px] font-bold ${strengthMeta.text}`}>
+                      {strengthMeta.label}
+                    </span>
+                  )}
+                </div>
+                {/* Rules checklist */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                  {passwordRules.map((r) => (
+                    <span
+                      key={r.id}
+                      className={`flex items-center gap-1.5 text-[10px] font-medium transition-colors ${
+                        r.passed ? "text-emerald-600" : "text-[#9CA3AF]"
+                      }`}
+                    >
+                      <FontAwesomeIcon
+                        icon={r.passed ? faCircleCheck : faXmark}
+                        className={`h-3 w-3 ${r.passed ? "text-emerald-500" : "text-[#CBD5E1]"}`}
+                      />
+                      {r.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          <div>
-            <label className="mb-1.5 block text-xs font-bold text-[#1C2B4A]">
-              Type de compte
-            </label>
-            <div className="grid grid-cols-2 gap-2 rounded-xl border border-[#E2E8F2] bg-[#F8FAFC] p-1">
-              {[
-                { value: "utilisateur", label: "Utilisateur" },
-                { value: "pharmacien", label: "Pharmacien" },
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setForm({ ...form, role: option.value })}
-                  className={`flex h-10 items-center justify-center gap-2 rounded-lg text-sm font-bold transition ${
-                    form.role === option.value
-                      ? "bg-white text-[#2F6E9E] shadow-sm"
-                      : "text-[#6B7280] hover:text-[#1C2B4A]"
-                  }`}
-                >
-                  <FontAwesomeIcon icon={faUserTag} className="h-3.5 w-3.5" />
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Confirm password */}
+          <Field
+            label="Confirmer le mot de passe"
+            icon={faLock}
+            name="password_confirm"
+            type={showConfirm ? "text" : "password"}
+            placeholder="Répétez votre mot de passe"
+            value={form.password_confirm}
+            autoComplete="new-password"
+            valid={confirmValid}
+            error={confirmErr}
+            onChange={handleChange}
+            onBlur={handleBlur}
+            required
+            rightAction={
+              <button
+                type="button"
+                onClick={() => setShowConfirm((v) => !v)}
+                className="flex h-7 w-7 flex-none items-center justify-center rounded-lg text-[#9CA3AF] transition hover:text-[#2F6E9E]"
+                aria-label={showConfirm ? "Masquer" : "Afficher"}
+              >
+                <FontAwesomeIcon icon={showConfirm ? faEyeSlash : faEye} className="h-3.5 w-3.5" />
+              </button>
+            }
+          />
 
-          <label className="flex items-start gap-3 rounded-xl border border-[#E2E8F2] bg-[#F8FAFC] px-4 py-3 text-sm font-medium text-[#6B7280]">
-            <input
-              type="checkbox"
-              checked={acceptedTerms}
-              onChange={(event) => setAcceptedTerms(event.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-[#CBD5E1] text-[#2F6E9E] focus:ring-[#2F6E9E]/20"
-            />
-            <span>
-              J'accepte les conditions d'utilisation de PharmaLocate.
-            </span>
-          </label>
-
-          {error && (
-            <div className="flex items-start gap-2 rounded-xl border border-[#EF4444]/25 bg-[#EF4444]/10 px-4 py-3 text-sm font-semibold leading-6 text-[#DC2626]">
-              <FontAwesomeIcon
-                icon={faCircleExclamation}
-                className="mt-1 h-4 w-4 flex-none"
-              />
-              <span>{error}</span>
+          {/* Error */}
+          {submitError && (
+            <div className="flex items-start gap-2 rounded-[14px] border border-red-200 bg-red-50 px-3.5 py-3 text-sm font-medium text-red-700">
+              <FontAwesomeIcon icon={faCircleExclamation} className="mt-0.5 h-4 w-4 flex-none" />
+              <span>{submitError}</span>
             </div>
           )}
 
+          {/* Submit */}
           <button
             type="submit"
-            disabled={loading || !acceptedTerms || !!validatePhone(form.phone_number)}
-            className="flex h-12 w-full items-center justify-center rounded-xl bg-[#2F6E9E] text-sm font-bold text-white shadow-lg shadow-[#2F6E9E]/20 transition hover:bg-[#265B84] focus:outline-none focus:ring-4 focus:ring-[#2F6E9E]/20 disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={loading}
+            className="group flex h-11 w-full items-center justify-center gap-2 rounded-[14px] bg-[#2F6E9E] text-sm font-bold text-white shadow-md shadow-[#2F6E9E]/20 transition hover:bg-[#265B84] focus:outline-none focus:ring-4 focus:ring-[#2F6E9E]/20 disabled:cursor-not-allowed disabled:opacity-55"
           >
-            {loading ? "Création..." : "Créer mon compte"}
+            {loading ? (
+              <>
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Création en cours…
+              </>
+            ) : (
+              <>
+                Créer mon compte
+                <FontAwesomeIcon
+                  icon={faArrowRight}
+                  className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
+                />
+              </>
+            )}
           </button>
         </form>
 
-        <p className="mt-5 text-center text-sm font-medium leading-6 text-[#6B7280]">
-          Déjà un compte ?{" "}
-          <button
-            type="button"
-            onClick={() => navigate("/login")}
-            className="font-bold text-[#2FA6A3] transition hover:underline"
-          >
-            Se connecter
-          </button>
-        </p>
+        {/* Footer */}
+        <div className="mt-5 space-y-2 text-center">
+          <p className="text-sm font-medium text-[#6B7280]">
+            Déjà un compte ?{" "}
+            <button
+              type="button"
+              onClick={() => navigate("/login")}
+              className="font-bold text-[#2FA6A3] transition hover:underline"
+            >
+              Se connecter
+            </button>
+          </p>
+        </div>
       </section>
     </div>
   );

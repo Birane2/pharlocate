@@ -18,6 +18,7 @@ from accounts.admin_serializers import (
 from accounts.pagination import UserPagination
 from config.permissions import IsAdminRole, IsAuthenticatedWithTokenMessage
 from deliveries.models import Delivery
+from deliveries.serializers import AdminDeliverySerializer
 from finance.models import CommissionInvoice
 from medicaments.models import Medicament, Stock
 from notifications_app.models import Notification
@@ -32,6 +33,7 @@ from pharmacies.admin_serializers import (
 )
 from pharmacies.models import Pharmacy
 from reservations.models import Reservation
+from reservations.serializers import AdminReservationSerializer
 from subscriptions.models import PharmacySubscription, SubscriptionPayment, SubscriptionRefund
 
 
@@ -916,3 +918,128 @@ class AdminPharmacyReactivateView(APIView):
             'message': 'Pharmacie reactivee avec succes.',
             'data': PharmacyValidationSerializer(pharmacy).data,
         })
+
+
+# --- Admin Pagination ---
+
+class AdminStandardPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+# --- Admin Reservations ---
+
+class AdminReservationListView(generics.ListAPIView):
+    serializer_class = AdminReservationSerializer
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+    pagination_class = AdminStandardPagination
+
+    def get_queryset(self):
+        qs = (
+            Reservation.objects
+            .select_related("user", "pharmacie")
+            .prefetch_related("items__medicament")
+            .order_by("-date_reservation")
+        )
+        params = self.request.query_params
+        statut = params.get("statut", "").strip()
+        if statut:
+            qs = qs.filter(statut=statut)
+        statut_paiement = params.get("statut_paiement", "").strip()
+        if statut_paiement:
+            qs = qs.filter(statut_paiement=statut_paiement)
+        type_reservation = params.get("type_reservation", "").strip()
+        if type_reservation:
+            qs = qs.filter(type_reservation=type_reservation)
+        pharmacie_id = params.get("pharmacie", "").strip()
+        if pharmacie_id:
+            qs = qs.filter(pharmacie_id=pharmacie_id)
+        user_id = params.get("user", "").strip()
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+        search = params.get("search", "").strip()
+        if search:
+            qs = qs.filter(
+                Q(user__first_name__icontains=search)
+                | Q(user__last_name__icontains=search)
+                | Q(user__email__icontains=search)
+                | Q(user__phone_number__icontains=search)
+                | Q(pharmacie__nom__icontains=search)
+            )
+        start_date = params.get("start_date", "").strip()
+        if start_date:
+            qs = qs.filter(date_reservation__date__gte=start_date)
+        end_date = params.get("end_date", "").strip()
+        if end_date:
+            qs = qs.filter(date_reservation__date__lte=end_date)
+        return qs
+
+
+class AdminReservationDetailView(generics.RetrieveAPIView):
+    serializer_class = AdminReservationSerializer
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+
+    def get_queryset(self):
+        return (
+            Reservation.objects
+            .select_related("user", "pharmacie")
+            .prefetch_related("items__medicament")
+        )
+
+
+# --- Admin Deliveries ---
+
+class AdminDeliveryListView(generics.ListAPIView):
+    serializer_class = AdminDeliverySerializer
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+    pagination_class = AdminStandardPagination
+
+    def get_queryset(self):
+        qs = (
+            Delivery.objects
+            .select_related("reservation", "pharmacy", "user")
+            .prefetch_related("reservation__items__medicament")
+            .order_by("-date_creation")
+        )
+        params = self.request.query_params
+        statut = params.get("statut", "").strip()
+        if statut:
+            qs = qs.filter(statut=statut)
+        pharmacy_id = params.get("pharmacy", "").strip()
+        if pharmacy_id:
+            qs = qs.filter(pharmacy_id=pharmacy_id)
+        user_id = params.get("user", "").strip()
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+        search = params.get("search", "").strip()
+        if search:
+            qs = qs.filter(
+                Q(user__first_name__icontains=search)
+                | Q(user__last_name__icontains=search)
+                | Q(user__email__icontains=search)
+                | Q(user__phone_number__icontains=search)
+                | Q(pharmacy__nom__icontains=search)
+                | Q(adresse_livraison__icontains=search)
+            )
+        start_date = params.get("start_date", "").strip()
+        if start_date:
+            qs = qs.filter(date_creation__date__gte=start_date)
+        end_date = params.get("end_date", "").strip()
+        if end_date:
+            qs = qs.filter(date_creation__date__lte=end_date)
+        return qs
+
+
+class AdminDeliveryDetailView(generics.RetrieveAPIView):
+    serializer_class = AdminDeliverySerializer
+    permission_classes = [IsAuthenticatedWithTokenMessage, IsAdminRole]
+
+    def get_queryset(self):
+        return (
+            Delivery.objects
+            .select_related("reservation", "pharmacy", "user")
+            .prefetch_related("reservation__items__medicament")
+        )
+
+

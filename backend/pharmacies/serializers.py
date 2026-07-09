@@ -141,6 +141,11 @@ class PharmacySerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     latitude = CoordinateDecimalField(coordinate_label='Latitude')
     longitude = CoordinateDecimalField(coordinate_label='Longitude')
+    city = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    region = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    country = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    postal_code = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    google_place_id = serializers.CharField(max_length=300, required=False, allow_blank=True, allow_null=True)
     horaires = HoraireSerializer(many=True, read_only=True)
     is_open = serializers.SerializerMethodField()
     est_garde = serializers.SerializerMethodField()
@@ -154,6 +159,11 @@ class PharmacySerializer(serializers.ModelSerializer):
             'adresse',
             'latitude',
             'longitude',
+            'city',
+            'region',
+            'country',
+            'postal_code',
+            'google_place_id',
             'telephone',
             'photo',
             'est_valide',
@@ -327,6 +337,11 @@ class PharmacyProfileSerializer(serializers.ModelSerializer):
         allow_blank=True,
         allow_null=True,
     )
+    city = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    region = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    country = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    postal_code = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    google_place_id = serializers.CharField(max_length=300, required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Pharmacy
@@ -338,6 +353,11 @@ class PharmacyProfileSerializer(serializers.ModelSerializer):
             'latitude',
             'longitude',
             'google_maps_url',
+            'city',
+            'region',
+            'country',
+            'postal_code',
+            'google_place_id',
             'telephone',
             'photo',
             'est_valide',
@@ -387,13 +407,22 @@ class PharmacyProfileSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         google_maps_url = attrs.get('google_maps_url')
 
-        # If URL cleared → clear coordinates too
-        if google_maps_url == '' or google_maps_url is None:
-            if 'google_maps_url' in attrs:
+        # Direct coordinates from the map picker take priority
+        has_explicit_coords = (
+            'latitude' in attrs
+            and 'longitude' in attrs
+            and attrs.get('latitude') is not None
+            and attrs.get('longitude') is not None
+        )
+
+        # URL cleared → clear coordinates too, UNLESS direct coords were also sent
+        if 'google_maps_url' in attrs and (google_maps_url == '' or google_maps_url is None):
+            if not has_explicit_coords:
                 attrs['latitude'] = None
                 attrs['longitude'] = None
             return attrs
 
+        # URL provided → extract and override coordinates
         if google_maps_url:
             lat, lng = extract_coords_from_maps_url(google_maps_url)
             if lat is None or lng is None:

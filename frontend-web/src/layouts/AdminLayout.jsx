@@ -1,5 +1,5 @@
 import { useState } from "react";
-import Header from "../components/layout/Header";
+import AdminHeader from "../components/admin/AdminHeader";
 import Sidebar from "../components/layout/Sidebar";
 import { adminLinks } from "../routes/dashboardLinks";
 
@@ -8,10 +8,8 @@ function AdminLayout({
   subtitle,
   children,
   showDateFilter = false,
-  selectedDate = "",
   startDate = "",
   endDate = "",
-  onDateChange,
   onStartDateChange,
   onEndDateChange,
   onTodayClick,
@@ -39,14 +37,12 @@ function AdminLayout({
           sidebarCollapsed ? "lg:ml-[72px]" : "lg:ml-[230px]"
         }`}
       >
-        <Header
+        <AdminHeader
           title={title}
           subtitle={subtitle}
           showDateFilter={showDateFilter}
-          selectedDate={selectedDate}
           startDate={startDate}
           endDate={endDate}
-          onDateChange={onDateChange}
           onStartDateChange={onStartDateChange}
           onEndDateChange={onEndDateChange}
           onTodayClick={onTodayClick}
@@ -54,6 +50,7 @@ function AdminLayout({
           onResetClick={onResetClick}
           actionLoading={actionLoading}
           notificationsPath="/admin/notifications"
+          onMenuClick={() => setSidebarCollapsed((c) => !c)}
         />
 
         <section className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-6">

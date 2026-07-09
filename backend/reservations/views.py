@@ -2,6 +2,7 @@ import json
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
@@ -9,10 +10,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from deliveries.services import create_delivery_for_reservation
-from payments.models import PaymentMethod, PharmacyPaymentMethod
+from payments.models import Payment, PaymentMethod, PharmacyPaymentMethod
 from payments.serializers import PaymentSerializer
 from payments.services import create_payment_for_reservation
 from .models import Reservation
+from .pagination import StandardResultsSetPagination, paginate_reservations
 from .serializers import ReservationSerializer
 from .services import cancel_reservation_by_user
 
@@ -20,19 +22,25 @@ from .services import cancel_reservation_by_user
 class ReservationListCreateView(generics.ListCreateAPIView):
     serializer_class = ReservationSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         user = self.request.user
+        base_qs = Reservation.objects.select_related(
+            'user', 'pharmacie'
+        ).prefetch_related(
+            'items__medicament'
+        )
 
         if user.role == 'admin':
-            return Reservation.objects.all().order_by('-date_reservation')
+            return base_qs.order_by('-date_reservation')
 
         if user.role == 'pharmacien':
-            return Reservation.objects.filter(
+            return base_qs.filter(
                 pharmacie__user=user
             ).order_by('-date_reservation')
 
-        return Reservation.objects.filter(user=user).order_by('-date_reservation')
+        return base_qs.filter(user=user).order_by('-date_reservation')
 
 
 class ReservationDetailView(generics.RetrieveAPIView):
@@ -258,3 +266,150 @@ def cancel_reservation(request, pk):
         },
         status=status.HTTP_200_OK,
     )
+
+
+_USER_DELETION_BLOCKED_STATUSES = frozenset({
+    'confirmee', 'en_preparation', 'prete_a_retirer',
+    'retiree', 'prete', 'en_livraison', 'livree',
+})
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_reservation(request, pk):
+    """
+    DELETE /api/reservations/{id}/delete/
+    L'utilisateur peut supprimer sa propre réservation si elle est annulée ou refusée
+    et qu'aucun paiement validé n'existe.
+    """
+    try:
+        reservation = Reservation.objects.select_related(
+            'user', 'payment',
+        ).get(pk=pk)
+    except Reservation.DoesNotExist:
+        return Response({'error': 'Réservation introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if reservation.user_id != request.user.id:
+        return Response(
+            {'error': "Vous n'êtes pas autorisé à supprimer cette réservation."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if reservation.statut in _USER_DELETION_BLOCKED_STATUSES:
+        return Response(
+            {'error': 'Cette réservation ne peut plus être supprimée car elle est déjà en cours de traitement.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        if reservation.payment.statut == 'valide':
+            return Response(
+                {'error': 'Cette réservation ne peut plus être supprimée car le paiement a déjà été validé.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    except Payment.DoesNotExist:
+        pass
+
+    from django.db import transaction as db_transaction
+    with db_transaction.atomic():
+        reservation.delete()
+
+    return Response({'message': 'Réservation supprimée avec succès.'}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pharmacien_reservation_stats(request):
+    """
+    GET /api/pharmacien/reservations/stats/
+    Retourne les compteurs par statut pour le tableau de bord pharmacien.
+    """
+    if getattr(request.user, 'role', None) != 'pharmacien':
+        return Response(
+            {'error': 'Acces reserve aux pharmaciens.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    from django.db.models import Count
+
+    payments = Payment.objects.filter(pharmacy__user=request.user)
+    total = payments.count()
+
+    pay_counts = {
+        c['statut']: c['count']
+        for c in payments.values('statut').annotate(count=Count('id'))
+    }
+    res_counts = {
+        c['reservation__statut']: c['count']
+        for c in payments.values('reservation__statut').annotate(count=Count('id'))
+    }
+
+    return Response({
+        'total': total,
+        'payment_pending': pay_counts.get('en_attente_verification', 0),
+        'en_attente': res_counts.get('en_attente', 0),
+        'confirmee': res_counts.get('confirmee', 0),
+        'en_preparation': res_counts.get('en_preparation', 0),
+        # Retrait
+        'prete_a_retirer': res_counts.get('prete_a_retirer', 0),
+        'retiree': res_counts.get('retiree', 0),
+        # Livraison
+        'prete': res_counts.get('prete', 0),
+        'en_livraison': res_counts.get('en_livraison', 0),
+        'livree': res_counts.get('livree', 0),
+        'annulee': res_counts.get('annulee', 0),
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def pharmacien_reservation_list(request):
+    """
+    GET /api/pharmacien/reservations/?page=1[&status=...][&reservation_status=...][&search=...]
+
+    Retourne les paiements de la pharmacie du pharmacien connecté,
+    paginés à 10 par page, avec les champs attendus par PharmacienReservations.jsx.
+    """
+    if getattr(request.user, 'role', None) != 'pharmacien':
+        return Response(
+            {'error': 'Acces reserve aux pharmaciens.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    payments = Payment.objects.filter(
+        pharmacy__user=request.user
+    ).select_related(
+        'reservation',
+        'pharmacy',
+        'user',
+        'payment_method',
+    ).prefetch_related(
+        'reservation__items__medicament',
+    )
+
+    payment_status = request.query_params.get('status') or request.query_params.get('statut')
+    if payment_status:
+        payments = payments.filter(statut=payment_status)
+
+    reservation_status = request.query_params.get('reservation_status')
+    if reservation_status:
+        payments = payments.filter(reservation__statut=reservation_status)
+
+    reservation_type = request.query_params.get('reservation_type')
+    if reservation_type:
+        payments = payments.filter(reservation__type_reservation=reservation_type)
+
+    search = (request.query_params.get('search') or '').strip()
+    if search:
+        payments = payments.filter(
+            Q(transaction_id__icontains=search)
+            | Q(numero_client__icontains=search)
+            | Q(user__first_name__icontains=search)
+            | Q(user__last_name__icontains=search)
+            | Q(user__phone_number__icontains=search)
+            | Q(reservation__id__icontains=search)
+        )
+
+    payments = payments.order_by('-date_creation')
+
+    return paginate_reservations(payments, request, PaymentSerializer, context={'request': request})

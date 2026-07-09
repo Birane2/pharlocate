@@ -29,6 +29,48 @@ class ReservationItemSerializer(serializers.ModelSerializer):
         ]
 
 
+class AdminReservationSerializer(serializers.ModelSerializer):
+    """Read-only serializer for admin reservation list and detail."""
+
+    items = ReservationItemSerializer(many=True, read_only=True)
+    pharmacie_nom = serializers.CharField(source='pharmacie.nom', read_only=True)
+    user_name = serializers.SerializerMethodField()
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+    user_phone = serializers.CharField(source='user.phone_number', read_only=True)
+    nb_items = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Reservation
+        fields = [
+            'id',
+            'user',
+            'user_name',
+            'user_email',
+            'user_phone',
+            'pharmacie',
+            'pharmacie_nom',
+            'items',
+            'nb_items',
+            'type_reservation',
+            'statut',
+            'statut_paiement',
+            'montant_medicaments',
+            'frais_livraison',
+            'montant_total',
+            'date_creation',
+            'date_modification',
+        ]
+        read_only_fields = fields
+
+    def get_user_name(self, obj):
+        full_name = obj.user.get_full_name()
+        return full_name or getattr(obj.user, 'phone_number', None) or obj.user.username
+
+    def get_nb_items(self, obj):
+        # len() uses prefetch_related cache — no extra query when items prefetched
+        return len(obj.items.all())
+
+
 class ReservationSerializer(serializers.ModelSerializer):
     items = ReservationItemSerializer(many=True, read_only=True)
 

@@ -7,6 +7,13 @@ class TransactionSerializer(serializers.ModelSerializer):
     user_name = serializers.SerializerMethodField()
     pharmacy_name = serializers.CharField(source='pharmacy.nom', read_only=True)
     payment_status = serializers.CharField(source='payment.statut', read_only=True)
+    payment_method = serializers.SerializerMethodField()
+    reservation_id = serializers.IntegerField(
+        source='reservation.id',
+        read_only=True,
+        allow_null=True,
+    )
+    type_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Transaction
@@ -24,6 +31,9 @@ class TransactionSerializer(serializers.ModelSerializer):
             'montant_pharmacie',
             'description',
             'reference_transaction',
+            'reservation_id',
+            'payment_method',
+            'type_label',
             'created_by',
             'payment_status',
             'date_creation',
@@ -32,6 +42,14 @@ class TransactionSerializer(serializers.ModelSerializer):
 
     def get_user_name(self, obj):
         return obj.user.get_full_name() or obj.user.username
+
+    def get_payment_method(self, obj):
+        if obj.payment_id and obj.payment.payment_method_id:
+            return obj.payment.payment_method.nom
+        return ''
+
+    def get_type_label(self, obj):
+        return obj.get_type_transaction_display()
 
 
 class AdminFinancialTransactionSerializer(serializers.Serializer):

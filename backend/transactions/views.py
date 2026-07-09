@@ -6,6 +6,7 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from common.pagination import StandardResultsSetPagination
 from config.permissions import (
     IsAdminRole,
     IsAuthenticatedWithTokenMessage,
@@ -307,13 +308,36 @@ class TransactionDetailView(generics.RetrieveAPIView):
 class PharmacienTransactionListView(generics.ListAPIView):
     serializer_class = TransactionSerializer
     permission_classes = [IsAuthenticatedWithTokenMessage, IsPharmacien]
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        return (
+        queryset = (
             Transaction.objects.filter(pharmacy__user=self.request.user)
-            .select_related('payment', 'reservation', 'user', 'pharmacy', 'created_by')
-            .order_by('-date_creation')
+            .select_related(
+                'payment__payment_method',
+                'reservation',
+                'user',
+                'pharmacy',
+                'created_by',
+            )
         )
+
+        type_filter = self.request.query_params.get('type_transaction') or self.request.query_params.get('type')
+        if type_filter:
+            queryset = queryset.filter(type_transaction=type_filter)
+
+        search = (self.request.query_params.get('search') or '').strip()
+        if search:
+            queryset = queryset.filter(
+                Q(reference_transaction__icontains=search)
+                | Q(description__icontains=search)
+                | Q(user__first_name__icontains=search)
+                | Q(user__last_name__icontains=search)
+                | Q(payment__transaction_id__icontains=search)
+                | Q(reservation__id__icontains=search)
+            )
+
+        return queryset.order_by('-date_creation')
 
 
 def _paginate_list(items, request, default_page_size=10):

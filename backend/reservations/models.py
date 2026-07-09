@@ -8,8 +8,16 @@ class Reservation(models.Model):
     STATUS_PENDING = 'en_attente'
     STATUS_CONFIRMED = 'confirmee'
     STATUS_PREPARING = 'en_preparation'
+
+    # Retrait en pharmacie
+    STATUS_READY_PICKUP = 'prete_a_retirer'
+    STATUS_PICKED_UP = 'retiree'
+
+    # Livraison à domicile
     STATUS_READY = 'prete'
+    STATUS_IN_DELIVERY = 'en_livraison'
     STATUS_DELIVERED = 'livree'
+
     STATUS_CANCELLED = 'annulee'
     STATUS_REJECTED = 'refusee'
 
@@ -17,7 +25,10 @@ class Reservation(models.Model):
         (STATUS_PENDING, 'En attente'),
         (STATUS_CONFIRMED, 'Confirmee'),
         (STATUS_PREPARING, 'En preparation'),
+        (STATUS_READY_PICKUP, 'Prete a retirer'),
+        (STATUS_PICKED_UP, 'Retiree'),
         (STATUS_READY, 'Prete'),
+        (STATUS_IN_DELIVERY, 'En livraison'),
         (STATUS_DELIVERED, 'Livree'),
         (STATUS_CANCELLED, 'Annulee'),
         (STATUS_REJECTED, 'Refusee'),

@@ -40,6 +40,11 @@ class Pharmacy(models.Model):
         default='en_attente',
     )
     google_maps_url = models.URLField(max_length=500, blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
+    region = models.CharField(max_length=100, blank=True, null=True)
+    country = models.CharField(max_length=100, blank=True, null=True)
+    postal_code = models.CharField(max_length=20, blank=True, null=True)
+    google_place_id = models.CharField(max_length=300, blank=True, null=True)
     motif_refus = models.TextField(blank=True, null=True)
     date_creation = models.DateTimeField(auto_now_add=True)
     date_modification = models.DateTimeField(auto_now=True)

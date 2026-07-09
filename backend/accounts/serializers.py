@@ -124,7 +124,6 @@ class RegisterSerializer(serializers.ModelSerializer):
     password_confirm = serializers.CharField(write_only=True)
     email = serializers.EmailField(required=True, allow_blank=False)
     phone_number = serializers.CharField(required=True)
-    role = serializers.ChoiceField(choices=User.ROLE_CHOICES, required=True)
 
     class Meta:
         model = User
@@ -136,7 +135,6 @@ class RegisterSerializer(serializers.ModelSerializer):
             'email',
             'password',
             'password_confirm',
-            'role',
         ]
 
     def validate(self, attrs):
@@ -212,7 +210,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             is_active=False,
             is_email_verified=False,
             is_phone_verified=False,
-            role=validated_data.get('role', 'utilisateur'),
+            role='pharmacien',
         )
         return user
 

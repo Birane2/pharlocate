@@ -387,6 +387,36 @@ class PharmacienPharmacyProfileView(APIView):
         serializer.save()
         return Response(serializer.data)
 
+    def post(self, request):
+        user = request.user
+        if Pharmacy.objects.filter(user=user).exists():
+            return Response(
+                {'error': 'Ce pharmacien possede deja une pharmacie.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = PharmacyProfileSerializer(
+            data=request.data,
+            context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        pharmacy = serializer.save(
+            user=user,
+            est_valide=False,
+            statut_validation='en_attente',
+            motif_refus='',
+        )
+        return Response(
+            {
+                'message': (
+                    'Pharmacie creee avec succes. '
+                    'Elle est en attente de validation par un administrateur.'
+                ),
+                'has_pharmacy': True,
+                'data': PharmacyProfileSerializer(pharmacy, context={'request': request}).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
     def patch(self, request):
         serializer = PharmacyProfileSerializer(
             self.get_object(),
@@ -640,4 +670,27 @@ class PharmacienDashboardStatsView(APIView):
                     'out': stocks_rupture.count(),
                 },
             },
+        })
+
+
+class PharmacyLocationView(APIView):
+    """Retourne uniquement les données de localisation d'une pharmacie validée."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, pk=None):
+        from django.shortcuts import get_object_or_404
+        pharmacy = get_object_or_404(Pharmacy, pk=pk, est_valide=True)
+        return Response({
+            'id': pharmacy.id,
+            'name': pharmacy.nom,
+            'latitude': float(pharmacy.latitude) if pharmacy.latitude is not None else None,
+            'longitude': float(pharmacy.longitude) if pharmacy.longitude is not None else None,
+            'address': pharmacy.adresse or '',
+            'city': pharmacy.city or '',
+            'region': pharmacy.region or '',
+            'country': pharmacy.country or '',
+            'postal_code': pharmacy.postal_code or '',
+            'place_id': pharmacy.google_place_id or '',
+            'telephone': pharmacy.telephone or '',
         })

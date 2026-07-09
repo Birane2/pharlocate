@@ -60,6 +60,11 @@ export const createPharmacy = async (data) => {
   return res.data;
 };
 
+export const createPharmacyProfile = async (data) => {
+  const res = await API.post("/api/pharmacien/pharmacie/", data);
+  return res.data;
+};
+
 export const getMyPharmacyStatus = async () => {
   try {
     const res = await API.get("/api/pharmacies/my-pharmacy/");

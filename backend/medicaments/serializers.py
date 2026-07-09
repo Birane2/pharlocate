@@ -50,7 +50,7 @@ class MedicamentSerializer(serializers.ModelSerializer):
 
 
 class MedicamentSummarySerializer(serializers.ModelSerializer):
-    photo = serializers.ImageField(use_url=True, required=False)
+    photo = serializers.SerializerMethodField()
     photo_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -64,8 +64,11 @@ class MedicamentSummarySerializer(serializers.ModelSerializer):
             'categorie',
         ]
 
-    def get_photo_url(self, obj):
+    def _get_existing_photo_url(self, obj):
         if not obj.photo:
+            return None
+
+        if not obj.photo.storage.exists(obj.photo.name):
             return None
 
         request = self.context.get('request')
@@ -75,6 +78,12 @@ class MedicamentSummarySerializer(serializers.ModelSerializer):
             return photo_url
 
         return request.build_absolute_uri(photo_url)
+
+    def get_photo(self, obj):
+        return self._get_existing_photo_url(obj)
+
+    def get_photo_url(self, obj):
+        return self._get_existing_photo_url(obj)
 
 
 class StockSerializer(serializers.ModelSerializer):

@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from rest_framework import status
@@ -7,6 +8,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from config.permissions import IsAdminRole
+from common.pagination import paginate_response
+from notifications_app.models import Notification
 from pharmacies.models import Pharmacy
 from reservations.models import Reservation
 from reservations.services import calculate_reservation_amount, confirm_reservation
@@ -413,6 +416,11 @@ def create_payment(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def pharmacist_orders(request):
+    if getattr(request.user, 'role', None) != 'pharmacien':
+        return Response({
+            'error': "Acces reserve aux pharmaciens."
+        }, status=status.HTTP_403_FORBIDDEN)
+
     payments = Payment.objects.filter(
         pharmacy__user=request.user
     ).select_related(
@@ -420,15 +428,36 @@ def pharmacist_orders(request):
         'pharmacy',
         'user',
         'payment_method',
-    ).order_by('-date_creation')
-
-    serializer = PaymentSerializer(
-        payments,
-        many=True,
-        context={'request': request}
+    ).prefetch_related(
+        'reservation__items__medicament',
     )
 
-    return Response(serializer.data, status=status.HTTP_200_OK)
+    payment_status = request.query_params.get('status') or request.query_params.get('statut')
+    if payment_status:
+        payments = payments.filter(statut=payment_status)
+
+    reservation_status = request.query_params.get('reservation_status')
+    if reservation_status:
+        payments = payments.filter(reservation__statut=reservation_status)
+
+    reservation_type = request.query_params.get('reservation_type')
+    if reservation_type:
+        payments = payments.filter(reservation__type_reservation=reservation_type)
+
+    search = (request.query_params.get('search') or '').strip()
+    if search:
+        payments = payments.filter(
+            Q(transaction_id__icontains=search)
+            | Q(numero_client__icontains=search)
+            | Q(user__first_name__icontains=search)
+            | Q(user__last_name__icontains=search)
+            | Q(user__phone_number__icontains=search)
+            | Q(reservation__id__icontains=search)
+        )
+
+    payments = payments.order_by('-date_creation')
+
+    return paginate_response(payments, request, PaymentSerializer, context={'request': request})
 
 
 @api_view(['GET'])
@@ -593,12 +622,19 @@ def admin_reject_payment(request, pk):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def pharmacist_order_detail(request, pk):
+    if getattr(request.user, 'role', None) != 'pharmacien':
+        return Response({
+            'error': "Acces reserve aux pharmaciens."
+        }, status=status.HTTP_403_FORBIDDEN)
+
     try:
         payment = Payment.objects.select_related(
             'reservation',
             'pharmacy',
             'user',
             'payment_method',
+        ).prefetch_related(
+            'reservation__items__medicament',
         ).get(pk=pk)
     except Payment.DoesNotExist:
         return Response({
@@ -764,7 +800,11 @@ def change_order_status(request, pk, current_allowed, new_status, message):
     try:
         payment = Payment.objects.select_related(
             'reservation',
-            'pharmacy'
+            'pharmacy',
+            'user',
+            'payment_method',
+        ).prefetch_related(
+            'reservation__items__medicament',
         ).get(pk=pk)
     except Payment.DoesNotExist:
         return Response({
@@ -784,7 +824,23 @@ def change_order_status(request, pk, current_allowed, new_status, message):
         }, status=status.HTTP_400_BAD_REQUEST)
 
     reservation.statut = new_status
-    reservation.save()
+    reservation.save(update_fields=['statut', 'date_modification'])
+
+    notification_messages = {
+        'en_preparation': f'Votre commande #{reservation.id} est en preparation.',
+        'prete': f'Votre commande #{reservation.id} est prete pour le retrait ou la livraison.',
+        'livree': f'Votre commande #{reservation.id} a ete livree.',
+    }
+    Notification.objects.create(
+        user=reservation.user,
+        title='Mise a jour de commande',
+        message=notification_messages.get(
+            new_status,
+            f'Votre commande #{reservation.id} a ete mise a jour.'
+        ),
+        type=Notification.TYPE_CONFIRMATION,
+        notification_type=Notification.NTYPE_RESERVATION,
+    )
 
     return Response({
         'message': message,
@@ -798,45 +854,255 @@ def prepare_order(request, pk):
     return change_order_status(
         request,
         pk,
-        current_allowed=['confirmee'],
-        new_status='en_preparation',
+        current_allowed=[Reservation.STATUS_CONFIRMED],
+        new_status=Reservation.STATUS_PREPARING,
         message='Commande passée en préparation.'
     )
+
+
+def _get_payment_for_action(pk, user):
+    """Helper: fetch payment with full relations, check ownership, return (payment, error_response)."""
+    try:
+        payment = Payment.objects.select_related(
+            'reservation', 'pharmacy', 'user', 'payment_method',
+        ).prefetch_related(
+            'reservation__items__medicament',
+        ).get(pk=pk)
+    except Payment.DoesNotExist:
+        return None, Response({'error': 'Commande introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not is_pharmacy_owner(user, payment.pharmacy):
+        return None, Response(
+            {'error': "Vous n'avez pas la permission de modifier cette commande."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    return payment, None
 
 
 @api_view(['PATCH', 'POST'])
 @permission_classes([IsAuthenticated])
 def ready_order(request, pk):
-    return change_order_status(
-        request,
-        pk,
-        current_allowed=['en_preparation'],
-        new_status='prete',
-        message='Commande marquée comme prête.'
+    """
+    Terminer la préparation.
+    Retrait  → prete_a_retirer
+    Livraison → prete
+    """
+    payment, err = _get_payment_for_action(pk, request.user)
+    if err:
+        return err
+
+    reservation = payment.reservation
+
+    if reservation.statut != Reservation.STATUS_PREPARING:
+        return Response({'error': 'Changement de statut non autorisé.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if reservation.type_reservation == Reservation.TYPE_PICKUP:
+        new_status = Reservation.STATUS_READY_PICKUP
+        notif_msg = f'Votre commande #{reservation.id} est prête à être retirée en pharmacie.'
+        response_msg = 'Commande prête à retirer.'
+    else:
+        new_status = Reservation.STATUS_READY
+        notif_msg = f'Votre commande #{reservation.id} est prête pour la livraison.'
+        response_msg = 'Commande prête pour la livraison.'
+
+    reservation.statut = new_status
+    reservation.save(update_fields=['statut', 'date_modification'])
+
+    Notification.objects.create(
+        user=reservation.user,
+        title='Commande prête',
+        message=notif_msg,
+        type=Notification.TYPE_CONFIRMATION,
+        notification_type=Notification.NTYPE_RESERVATION,
     )
+
+    return Response({
+        'message': response_msg,
+        'data': PaymentSerializer(payment, context={'request': request}).data
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['PATCH', 'POST'])
+@permission_classes([IsAuthenticated])
+def picked_up_order(request, pk):
+    """
+    Confirmer le retrait en pharmacie.
+    Réservé aux commandes type=retrait, statut=prete_a_retirer.
+    """
+    payment, err = _get_payment_for_action(pk, request.user)
+    if err:
+        return err
+
+    reservation = payment.reservation
+
+    if reservation.type_reservation != Reservation.TYPE_PICKUP:
+        return Response({
+            'error': "Cette action est réservée aux commandes avec retrait en pharmacie."
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    if reservation.statut != Reservation.STATUS_READY_PICKUP:
+        return Response({
+            'error': "Changement de statut non autorisé. La commande doit être à l'état « Prête à retirer »."
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    reservation.statut = Reservation.STATUS_PICKED_UP
+    reservation.save(update_fields=['statut', 'date_modification'])
+
+    Notification.objects.create(
+        user=reservation.user,
+        title='Commande retirée',
+        message=f'Votre commande #{reservation.id} a été retirée avec succès.',
+        type=Notification.TYPE_CONFIRMATION,
+        notification_type=Notification.NTYPE_RESERVATION,
+    )
+
+    return Response({
+        'message': 'Retrait confirmé. Commande marquée comme retirée.',
+        'data': PaymentSerializer(payment, context={'request': request}).data
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['PATCH', 'POST'])
+@permission_classes([IsAuthenticated])
+def start_delivery_order(request, pk):
+    """
+    Démarrer la livraison.
+    Réservé aux commandes type=livraison, statut=prete.
+    """
+    payment, err = _get_payment_for_action(pk, request.user)
+    if err:
+        return err
+
+    reservation = payment.reservation
+
+    if reservation.type_reservation != Reservation.TYPE_DELIVERY:
+        return Response({
+            'error': "Cette action est réservée aux commandes avec livraison à domicile."
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    if reservation.statut != Reservation.STATUS_READY:
+        return Response({
+            'error': "Changement de statut non autorisé. La commande doit être à l'état « Prête »."
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    reservation.statut = Reservation.STATUS_IN_DELIVERY
+    reservation.save(update_fields=['statut', 'date_modification'])
+
+    Notification.objects.create(
+        user=reservation.user,
+        title='Livraison en cours',
+        message=f'Votre commande #{reservation.id} est en cours de livraison.',
+        type=Notification.TYPE_CONFIRMATION,
+        notification_type=Notification.NTYPE_RESERVATION,
+    )
+
+    return Response({
+        'message': 'Livraison démarrée.',
+        'data': PaymentSerializer(payment, context={'request': request}).data
+    }, status=status.HTTP_200_OK)
 
 
 @api_view(['PATCH', 'POST'])
 @permission_classes([IsAuthenticated])
 def delivered_order(request, pk):
-    response = change_order_status(
-        request,
-        pk,
-        current_allowed=['prete', 'en_preparation'],
-        new_status='livree',
-        message='Commande marquée comme livrée.'
+    """
+    Marquer comme livrée.
+    Réservé aux commandes type=livraison. Les commandes retrait utilisent picked_up_order.
+    """
+    payment, err = _get_payment_for_action(pk, request.user)
+    if err:
+        return err
+
+    reservation = payment.reservation
+
+    if reservation.type_reservation == Reservation.TYPE_PICKUP:
+        return Response({
+            'error': "Une commande avec retrait en pharmacie ne peut pas être marquée comme livrée. Utilisez l'action « Confirmer le retrait »."
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    allowed = [
+        Reservation.STATUS_READY,
+        Reservation.STATUS_IN_DELIVERY,
+        Reservation.STATUS_PREPARING,
+    ]
+    if reservation.statut not in allowed:
+        return Response({'error': 'Changement de statut non autorisé.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    reservation.statut = Reservation.STATUS_DELIVERED
+    reservation.save(update_fields=['statut', 'date_modification'])
+
+    Notification.objects.create(
+        user=reservation.user,
+        title='Commande livrée',
+        message=f'Votre commande #{reservation.id} a été livrée avec succès.',
+        type=Notification.TYPE_CONFIRMATION,
+        notification_type=Notification.NTYPE_RESERVATION,
     )
 
-    if response.status_code == 200:
-        try:
-            payment = Payment.objects.get(pk=pk)
+    try:
+        if hasattr(payment.reservation, 'delivery'):
+            delivery = payment.reservation.delivery
+            delivery.statut = 'livree'
+            delivery.date_livraison_reelle = timezone.now()
+            delivery.save(update_fields=['statut', 'date_livraison_reelle'])
+    except Exception:
+        pass
 
-            if hasattr(payment.reservation, 'delivery'):
-                delivery = payment.reservation.delivery
-                delivery.statut = 'livree'
-                delivery.date_livraison_reelle = timezone.now()
-                delivery.save(update_fields=['statut', 'date_livraison_reelle'])
-        except Payment.DoesNotExist:
-            pass
+    return Response({
+        'message': 'Commande marquée comme livrée.',
+        'data': PaymentSerializer(payment, context={'request': request}).data
+    }, status=status.HTTP_200_OK)
 
-    return response
+
+# ── Statuts bloquant la suppression ───────────────────────────────────────────
+
+_DELETION_BLOCKED_STATUSES = frozenset({
+    Reservation.STATUS_CONFIRMED,
+    Reservation.STATUS_PREPARING,
+    Reservation.STATUS_READY_PICKUP,
+    Reservation.STATUS_PICKED_UP,
+    Reservation.STATUS_READY,
+    Reservation.STATUS_IN_DELIVERY,
+    Reservation.STATUS_DELIVERED,
+})
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_order(request, pk):
+    """
+    DELETE /api/pharmacien/orders/{id}/
+    Supprime une commande uniquement si aucun traitement n'est en cours.
+    """
+    try:
+        payment = Payment.objects.select_related(
+            'reservation', 'pharmacy',
+        ).get(pk=pk)
+    except Payment.DoesNotExist:
+        return Response({'error': 'Commande introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not is_pharmacy_owner(request.user, payment.pharmacy):
+        return Response(
+            {'error': "Vous n'avez pas la permission de supprimer cette commande."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    reservation = payment.reservation
+
+    if reservation.statut in _DELETION_BLOCKED_STATUSES:
+        return Response(
+            {'error': 'Cette réservation ne peut plus être supprimée car elle est déjà en cours de traitement.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if payment.statut == Payment.STATUS_VALIDATED:
+        return Response(
+            {'error': 'Cette réservation ne peut plus être supprimée car le paiement a déjà été validé.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    with transaction.atomic():
+        reservation.delete()
+
+    return Response({'message': 'Réservation supprimée avec succès.'}, status=status.HTTP_200_OK)

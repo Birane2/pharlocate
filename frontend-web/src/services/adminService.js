@@ -46,6 +46,48 @@ const normalizeDashboardStats = (data = {}) => {
   };
 };
 
+// ─── Admin Reservations ───────────────────────────────────────────────────────
+
+export const getAdminReservations = async (params = {}) => {
+  const clean = Object.fromEntries(
+    Object.entries(params).filter(([, v]) => v !== "" && v !== null && v !== undefined)
+  );
+  const res = await API.get("/api/admin/reservations/", { params: clean });
+  return {
+    count: res.data.count ?? 0,
+    next: res.data.next ?? null,
+    previous: res.data.previous ?? null,
+    results: res.data.results || [],
+  };
+};
+
+export const getAdminReservationDetail = async (id) => {
+  const res = await API.get(`/api/admin/reservations/${id}/`);
+  return res.data;
+};
+
+// ─── Admin Deliveries ─────────────────────────────────────────────────────────
+
+export const getAdminDeliveries = async (params = {}) => {
+  const clean = Object.fromEntries(
+    Object.entries(params).filter(([, v]) => v !== "" && v !== null && v !== undefined)
+  );
+  const res = await API.get("/api/admin/deliveries/", { params: clean });
+  return {
+    count: res.data.count ?? 0,
+    next: res.data.next ?? null,
+    previous: res.data.previous ?? null,
+    results: res.data.results || [],
+  };
+};
+
+export const getAdminDeliveryDetail = async (id) => {
+  const res = await API.get(`/api/admin/deliveries/${id}/`);
+  return res.data;
+};
+
+// ─── Dashboard Stats ──────────────────────────────────────────────────────────
+
 export const getAdminDashboardStats = async (filters = {}) => {
   const params = {};
   const startDate = filters?.startDate || filters?.start_date || "";

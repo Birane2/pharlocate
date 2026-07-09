@@ -223,6 +223,16 @@ function Login() {
             Créer un compte
           </button>
         </p>
+        <p className="mt-2 text-center text-xs text-[#9CA3AF]">
+          Vous êtes pharmacien ?{" "}
+          <button
+            type="button"
+            onClick={() => navigate("/register/pharmacien")}
+            className="font-semibold text-[#2F6E9E] transition hover:underline"
+          >
+            Inscription pharmacien
+          </button>
+        </p>
       </section>
     </div>
   );

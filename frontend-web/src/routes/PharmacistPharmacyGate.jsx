@@ -27,7 +27,7 @@ function PharmacistPharmacyGate({ children }) {
         setMessage(status?.message || "");
 
         if (status?.has_pharmacy === false) {
-          navigate("/pharmacien/pharmacie", { replace: true });
+          navigate("/pharmacien/complete-profile", { replace: true });
         }
       } catch {
         if (isMounted) {

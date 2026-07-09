@@ -60,22 +60,20 @@ def create_otp_for_user(user):
         expires_at=timezone.now() + timedelta(minutes=OTP_EXPIRATION_MINUTES),
     )
     logger.info('OTP cree pour %s', user.email)
-    print('OTP cree')
-    print('OTP enregistre pour:', user.email)
     return otp_code
 
 
 def send_otp(user):
     otp_code = create_otp_for_user(user)
     logger.info('Envoi OTP e-mail lance vers %s', user.email)
-    print('Envoi email lance vers:', user.email)
 
     try:
         send_otp_email(user, otp_code.code)
     except OTPEmailDeliveryError as exc:
+        logger.exception('Echec envoi OTP e-mail vers %s', user.email)
         raise OTPDeliveryError(str(exc)) from exc
 
-    print('OTP envoye')
+    logger.info('OTP envoye avec succes vers %s', user.email)
     return otp_code
 
 

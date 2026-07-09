@@ -12,12 +12,7 @@ import {
   updateMyPharmacyProfile,
 } from "../../services/pharmacyService";
 
-const initialForm = {
-  nom: "",
-  adresse: "",
-  telephone: "",
-  google_maps_url: "",
-};
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getApiErrorMessage(error) {
   if (error.response?.status === 401) {
@@ -40,7 +35,6 @@ function getApiErrorMessage(error) {
   if (typeof data?.detail === "string") return data.detail;
 
   if (data && typeof data === "object") {
-    // Handle nested field errors like { google_maps_url: ["..."] }
     for (const val of Object.values(data)) {
       if (Array.isArray(val) && val[0]) return val[0];
       if (typeof val === "string") return val;
@@ -50,23 +44,61 @@ function getApiErrorMessage(error) {
   return "Impossible d'enregistrer le profil pharmacie.";
 }
 
+const initialForm = {
+  nom: "",
+  adresse: "",
+  telephone: "",
+};
+
 function toForm(pharmacy) {
   return {
     nom: pharmacy.nom || "",
     adresse: pharmacy.adresse || "",
     telephone: pharmacy.telephone || "",
-    google_maps_url: pharmacy.google_maps_url || "",
   };
 }
 
-function toCoords(pharmacy) {
-  if (!pharmacy?.latitude || !pharmacy?.longitude) return null;
-  return { lat: pharmacy.latitude, lng: pharmacy.longitude };
+function toLocationData(pharmacy) {
+  if (!pharmacy?.latitude && !pharmacy?.longitude) return null;
+  return {
+    lat: Number(pharmacy.latitude) || 0,
+    lng: Number(pharmacy.longitude) || 0,
+    address: pharmacy.adresse || "",
+    city: pharmacy.city || "",
+    region: pharmacy.region || "",
+    country: pharmacy.country || "",
+    postal_code: pharmacy.postal_code || "",
+    google_place_id: pharmacy.google_place_id || "",
+  };
 }
+
+function buildPayload(form, locationData) {
+  const payload = {
+    nom: form.nom,
+    adresse: form.adresse,
+    telephone: form.telephone,
+  };
+
+  if (locationData) {
+    payload.latitude = locationData.lat;
+    payload.longitude = locationData.lng;
+    payload.city = locationData.city || "";
+    payload.region = locationData.region || "";
+    payload.country = locationData.country || "";
+    payload.postal_code = locationData.postal_code || "";
+    payload.google_place_id = locationData.google_place_id || "";
+    payload.google_maps_url = null; // clear old URL-based entry
+  }
+
+  return payload;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 function PharmacieProfile() {
   const [pharmacy, setPharmacy] = useState(null);
   const [form, setForm] = useState(initialForm);
+  const [locationData, setLocationData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [hasPharmacy, setHasPharmacy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -74,19 +106,25 @@ function PharmacieProfile() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
+  // Load profile on mount
   useEffect(() => {
     const loadProfile = async () => {
       try {
         const data = await getMyPharmacyProfile();
         setPharmacy(data);
         setForm(toForm(data));
+        setLocationData(toLocationData(data));
         setHasPharmacy(true);
         setError("");
       } catch (err) {
-        if (err.hasPharmacy === false || err.response?.data?.has_pharmacy === false) {
+        if (
+          err.hasPharmacy === false ||
+          err.response?.data?.has_pharmacy === false
+        ) {
           setHasPharmacy(false);
           setPharmacy(null);
           setForm(initialForm);
+          setLocationData(null);
           setError("");
           return;
         }
@@ -106,6 +144,14 @@ function PharmacieProfile() {
     }));
   };
 
+  const handleLocationChange = (location) => {
+    setLocationData(location);
+    // Auto-fill the address field from the geocoding result
+    if (location?.address) {
+      setForm((prev) => ({ ...prev, adresse: location.address }));
+    }
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setSubmitting(true);
@@ -113,19 +159,22 @@ function PharmacieProfile() {
     setSuccessMessage("");
 
     try {
+      const payload = buildPayload(form, locationData);
+
       if (hasPharmacy) {
-        const data = await updateMyPharmacyProfile(form);
+        const data = await updateMyPharmacyProfile(payload);
         setPharmacy(data);
         setForm(toForm(data));
-        const coordsMsg = data.latitude && data.longitude
-          ? " Position GPS enregistree."
-          : "";
-        setSuccessMessage("Profil pharmacie mis a jour avec succes." + coordsMsg);
+        setLocationData(toLocationData(data));
+        const gpsMsg =
+          data.latitude && data.longitude ? " Position GPS enregistree." : "";
+        setSuccessMessage("Profil pharmacie mis a jour avec succes." + gpsMsg);
       } else {
-        const response = await createPharmacy(form);
+        const response = await createPharmacy(payload);
         const data = response.data || response;
         setPharmacy(data);
         setForm(toForm(data));
+        setLocationData(toLocationData(data));
         setHasPharmacy(true);
         setSuccessMessage(
           response.message ||
@@ -178,6 +227,7 @@ function PharmacieProfile() {
               </div>
             )}
 
+            {/* ── Creation ──────────────────────────────────── */}
             {!hasPharmacy && (
               <>
                 <PharmacyRequiredCard
@@ -191,18 +241,20 @@ function PharmacieProfile() {
                       Creer ma pharmacie
                     </h2>
                     <p className="mt-1 text-sm text-[#6B7280]">
-                      Renseignez les informations principales. La pharmacie sera en attente de validation par un administrateur.
+                      Renseignez les informations principales. La pharmacie sera en attente de
+                      validation par un administrateur.
                     </p>
                   </div>
 
                   <PharmacieProfileForm
                     form={form}
-                    currentCoords={null}
+                    locationData={locationData}
                     submitting={submitting}
                     uploadingPhoto={false}
                     showPhoto={false}
                     submitLabel="Creer"
                     onChange={handleChange}
+                    onLocationChange={handleLocationChange}
                     onPhotoChange={() => {}}
                     onSubmit={handleSubmit}
                   />
@@ -210,16 +262,18 @@ function PharmacieProfile() {
               </>
             )}
 
+            {/* ── Edition ───────────────────────────────────── */}
             {pharmacy && (
               <section>
                 <PharmacieProfileForm
                   form={form}
-                  currentCoords={toCoords(pharmacy)}
+                  locationData={locationData}
                   photoPreview={pharmacy.photo}
                   submitting={submitting}
                   uploadingPhoto={uploadingPhoto}
                   submitLabel="Enregistrer les modifications"
                   onChange={handleChange}
+                  onLocationChange={handleLocationChange}
                   onPhotoChange={handlePhotoChange}
                   onSubmit={handleSubmit}
                 />

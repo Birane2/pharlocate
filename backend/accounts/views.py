@@ -1,3 +1,5 @@
+import logging
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework import status
@@ -49,6 +51,7 @@ from .services.password_reset_service import (
 PASSWORD_RESET_NEUTRAL_MESSAGE = (
     'Si un compte existe avec cet e-mail, un code de reinitialisation a ete envoye.'
 )
+logger = logging.getLogger(__name__)
 
 
 class LoginView(APIView):
@@ -118,8 +121,16 @@ class AdminPasswordChangeView(APIView):
         })
 
 
+def _has_pharmacy(user):
+    try:
+        _ = user.pharmacy
+        return True
+    except Exception:
+        return False
+
+
 def _profile_data(user):
-    return {
+    data = {
         'id': user.id,
         'first_name': user.first_name,
         'last_name': user.last_name,
@@ -131,6 +142,9 @@ def _profile_data(user):
         'email': user.email,
         'role': user.role,
     }
+    if user.role == 'pharmacien':
+        data['has_pharmacy'] = _has_pharmacy(user)
+    return data
 
 
 @api_view(['GET', 'PUT', 'PATCH'])
@@ -165,13 +179,11 @@ def test_api(request):
 def register_view(request):
     serializer = RegisterSerializer(data=request.data)
     if serializer.is_valid():
-        print('Serializer valide')
         user = None
         try:
             with transaction.atomic():
                 user = serializer.save()
-                print('Utilisateur cree :', user.id)
-                print('Lancement envoi OTP')
+                logger.info('Utilisateur cree pendant inscription: %s', user.id)
                 send_otp(user)
         except OTPRateLimitError as exc:
             return Response(
@@ -192,29 +204,32 @@ def register_view(request):
             'requires_verification': True,
             'is_phone_verified': user.is_phone_verified,
         }, status=status.HTTP_201_CREATED)
-
-    print('Erreurs serializer inscription :', serializer.errors)
+    logger.info('Erreurs serializer inscription : %s', serializer.errors)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 def build_auth_payload(user):
     refresh = RefreshToken.for_user(user)
 
+    user_data = {
+        'id': user.id,
+        'full_name': user.get_full_name(),
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'phone_number': user.phone_number,
+        'email': user.email,
+        'role': user.role,
+        'is_active': user.is_active,
+        'is_email_verified': user.is_email_verified,
+        'is_phone_verified': user.is_phone_verified,
+    }
+    if user.role == 'pharmacien':
+        user_data['has_pharmacy'] = _has_pharmacy(user)
+
     return {
         'access': str(refresh.access_token),
         'refresh': str(refresh),
-        'user': {
-            'id': user.id,
-            'full_name': user.get_full_name(),
-            'first_name': user.first_name,
-            'last_name': user.last_name,
-            'phone_number': user.phone_number,
-            'email': user.email,
-            'role': user.role,
-            'is_active': user.is_active,
-            'is_email_verified': user.is_email_verified,
-            'is_phone_verified': user.is_phone_verified,
-        },
+        'user': user_data,
     }
 
 
@@ -294,13 +309,13 @@ def password_reset_request_view(request):
         request_password_reset(serializer.validated_data['email'])
     except PasswordResetRateLimitError:
         return Response(
-            {'message': PASSWORD_RESET_NEUTRAL_MESSAGE},
-            status=status.HTTP_200_OK,
+            {'error': 'Trop de demandes de reinitialisation. Reessayez plus tard.'},
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
         )
-    except PasswordResetDeliveryError:
+    except PasswordResetDeliveryError as exc:
         return Response(
-            {'message': PASSWORD_RESET_NEUTRAL_MESSAGE},
-            status=status.HTTP_200_OK,
+            {'error': str(exc)},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
     return Response({'message': PASSWORD_RESET_NEUTRAL_MESSAGE})
@@ -371,8 +386,16 @@ def forgot_password_view(request):
     # Always return neutral message — never reveal whether account exists
     try:
         request_password_reset(email)
-    except (PasswordResetRateLimitError, PasswordResetDeliveryError):
-        pass
+    except PasswordResetRateLimitError:
+        return Response(
+            {'error': 'Trop de demandes de reinitialisation. Reessayez plus tard.'},
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+    except PasswordResetDeliveryError as exc:
+        return Response(
+            {'error': str(exc)},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
 
     return Response({
         'message': 'Si un compte existe avec cet e-mail, un code OTP a été envoyé.',
