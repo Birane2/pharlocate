@@ -190,15 +190,3 @@ Le pharmacien vérifie la transaction avant de confirmer la commande.
 ---
 
 # 👨‍💻 Développeur
-
-**Birane Abdoulaye Gangué**
-
-Étudiant en Licence Informatique de Gestion – ISCAE Nouakchott
-
-Projet de fin d'études 2026
-
----
-
-# 📄 Licence
-
-Projet académique réalisé dans le cadre d'un mémoire de fin d'études.
